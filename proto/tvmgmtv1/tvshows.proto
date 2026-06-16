@@ -1,0 +1,156 @@
+syntax = "proto3";
+package muxcore.media.tv.v1;
+option go_package = "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1;tvmgmtv1";
+
+service TvManagementService {
+  rpc AddTVShow(AddTVShowRequest) returns (AddTVShowResponse);
+  rpc RemoveTVShow(RemoveTVShowRequest) returns (RemoveTVShowResponse);
+  rpc RefreshMetadata(RefreshMetadataRequest) returns (RefreshMetadataResponse);
+  rpc ListTVShows(ListTVShowsRequest) returns (ListTVShowsResponse);
+  rpc GetTVShow(GetTVShowRequest) returns (GetTVShowResponse);
+  rpc UpdateEpisodeMonitored(UpdateEpisodeMonitoredRequest) returns (UpdateEpisodeMonitoredResponse);
+  rpc UpdateSeasonMonitored(UpdateSeasonMonitoredRequest) returns (UpdateSeasonMonitoredResponse);
+  rpc AddEpisodeFile(AddEpisodeFileRequest) returns (AddEpisodeFileResponse);
+  rpc RemoveEpisodeFile(RemoveEpisodeFileRequest) returns (RemoveEpisodeFileResponse);
+}
+
+message AddTVShowRequest {
+  int32 tmdb_id = 1;
+  string name = 2;
+  int32 year = 3;
+  string overview = 4;
+  string poster_path = 5;
+  string backdrop_path = 6;
+  repeated string genres = 7;
+}
+
+message AddTVShowResponse {
+  string series_id = 1;
+}
+
+message RemoveTVShowRequest {
+  string series_id = 1;
+}
+
+message RemoveTVShowResponse {}
+
+message RefreshMetadataRequest {
+  string series_id = 1;
+}
+
+message RefreshMetadataResponse {}
+
+message ListTVShowsRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string search = 3;
+  string genre = 4;
+  string sort_by = 5;
+  string sort_order = 6;
+}
+
+message ListTVShowsResponse {
+  repeated TVSeries series = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message GetTVShowRequest {
+  string series_id = 1;
+}
+
+message GetTVShowResponse {
+  TVSeries series = 1;
+}
+
+message UpdateEpisodeMonitoredRequest {
+  string episode_id = 1;
+  bool monitored = 2;
+}
+
+message UpdateEpisodeMonitoredResponse {}
+
+message UpdateSeasonMonitoredRequest {
+  string season_id = 1;
+  bool monitored = 2;
+}
+
+message UpdateSeasonMonitoredResponse {}
+
+message TVSeries {
+  string id = 1;
+  int32 tmdb_id = 2;
+  string name = 3;
+  string original_name = 4;
+  int32 year = 5;
+  string overview = 6;
+  string tagline = 7;
+  string status = 8;
+  string network = 9;
+  string first_air_date = 10;
+  string last_air_date = 11;
+  double vote_average = 12;
+  repeated string genres = 13;
+  string poster_path = 14;
+  string backdrop_path = 15;
+  string poster_url = 16;
+  string backdrop_url = 17;
+  bool monitored = 18;
+  repeated TVSeason seasons = 19;
+  int32 total_episodes = 20;
+  int32 total_seasons = 21;
+  string created_at = 22;
+  string updated_at = 23;
+}
+
+message TVSeason {
+  string id = 1;
+  string series_id = 2;
+  int32 season_number = 3;
+  string name = 4;
+  string overview = 5;
+  int32 episode_count = 6;
+  string air_date = 7;
+  string poster_path = 8;
+  bool monitored = 9;
+  repeated TVEpisode episodes = 10;
+  string created_at = 11;
+  string updated_at = 12;
+}
+
+message TVEpisode {
+  string id = 1;
+  string series_id = 2;
+  string season_id = 3;
+  int32 tmdb_id = 4;
+  int32 episode_number = 5;
+  int32 season_number = 6;
+  int32 absolute_number = 7;
+  string name = 8;
+  string overview = 9;
+  string air_date = 10;
+  string still_path = 11;
+  bool monitored = 12;
+  bool has_file = 13;
+  string created_at = 14;
+  string updated_at = 15;
+}
+
+message AddEpisodeFileRequest {
+  string episode_id = 1;
+  string file_path = 2;
+  string quality = 3;
+  int64 size_bytes = 4;
+  string container = 5;
+}
+
+message AddEpisodeFileResponse {
+  string file_id = 1;
+}
+
+message RemoveEpisodeFileRequest {
+  string file_id = 1;
+}
+
+message RemoveEpisodeFileResponse {}
