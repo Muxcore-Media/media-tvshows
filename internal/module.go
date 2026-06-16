@@ -660,6 +660,13 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	if sortBy == "" {
 		sortBy = "name"
 	}
+	validSortColumns := map[string]bool{
+		"name": true, "year": true, "rating": true, "status": true,
+		"network": true, "added_at": true, "updated_at": true, "sort_name": true,
+	}
+	if !validSortColumns[sortBy] {
+		sortBy = "name"
+	}
 	sortOrder := req.GetSortOrder()
 	if sortOrder != "desc" {
 		sortOrder = "asc"
