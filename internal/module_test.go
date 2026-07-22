@@ -188,6 +188,13 @@ func TestGetMediaTypeInfo(t *testing.T) {
 	if len(info.FilterFields) == 0 {
 		t.Error("expected filter fields")
 	}
+	want := map[string]bool{"missing": true, "tags": true, "calendar": true}
+	for _, f := range info.Features {
+		delete(want, f)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing features: %v", want)
+	}
 }
 
 func TestListItems(t *testing.T) {
@@ -1134,6 +1141,53 @@ func TestTagsAndCalendar(t *testing.T) {
 	}
 }
 
+func TestMediaAdminLibraryAdapters(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+	s := mediaAdminServer{m: m}
+
+	add, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 42, Name: "Tagged", Year: 2020})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag, err := s.CreateTag(ctx, &mediaadminv1.CreateTagRequest{Label: "admin-anime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetItemTags(ctx, &mediaadminv1.SetItemTagsRequest{
+		ItemId: add.SeriesId, TagIds: []string{tag.TagId},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	filtered, err := m.ListItems(ctx, &mediaadminv1.ListItemsRequest{Page: 1, PageSize: 20, TagId: tag.TagId})
+	if err != nil || filtered.Total != 1 {
+		t.Fatalf("tag filter: %+v %v", filtered, err)
+	}
+
+	m.mu.Lock()
+	m.db.ExecContext(ctx,
+		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
+		 VALUES ('se1', ?, 1, 1, 'now', 'now')`, add.SeriesId)
+	m.db.ExecContext(ctx,
+		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, name, air_date, monitored, has_file, created_at, updated_at)
+		 VALUES ('epc', ?, 'se1', 1, 1, 'Pilot', '2024-06-01', 1, 0, 'now', 'now')`, add.SeriesId)
+	m.mu.Unlock()
+
+	missing, err := s.ListMissing(ctx, &mediaadminv1.ListMissingRequest{Page: 1, PageSize: 50, ParentId: add.SeriesId})
+	if err != nil || missing.Total < 1 {
+		t.Fatalf("admin missing: %+v %v", missing, err)
+	}
+
+	cal, err := s.GetCalendar(ctx, &mediaadminv1.GetCalendarRequest{StartDate: "2024-06-01", EndDate: "2024-06-30"})
+	if err != nil || len(cal.Items) != 1 || cal.Items[0].Id != "epc" {
+		t.Fatalf("admin calendar: %+v %v", cal, err)
+	}
+
+	if _, err := s.ListCollections(ctx, &mediaadminv1.ListCollectionsRequest{}); err == nil {
+		t.Fatal("expected collections unimplemented for TV")
+	}
+}
+
 func TestRemoveTVShowDeleteFiles(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()
@@ -1168,5 +1222,57 @@ func TestRemoveTVShowDeleteFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(f); !os.IsNotExist(err) {
 		t.Fatal("expected media file deleted")
+	}
+}
+
+func TestLookupEpisode(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+
+	m.mu.Lock()
+	m.db.ExecContext(ctx,
+		`INSERT INTO series (id, tmdb_id, name, original_name, year, monitored, created_at, updated_at)
+		 VALUES ('s1', 1396, 'Breaking Bad', 'Breaking Bad', 2008, 1, 'now', 'now')`)
+	m.db.ExecContext(ctx,
+		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
+		 VALUES ('se1', 's1', 5, 1, 'now', 'now')`)
+	m.db.ExecContext(ctx,
+		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, name, air_date, absolute_number, monitored, has_file, created_at, updated_at)
+		 VALUES
+		 ('ep1', 's1', 'se1', 1, 5, 'Live Free or Die', '2012-07-15', 50, 1, 0, 'now', 'now'),
+		 ('ep2', 's1', 'se1', 2, 5, 'Madrigal', '2012-07-22', 51, 1, 0, 'now', 'now')`)
+	m.mu.Unlock()
+
+	resp, err := m.LookupEpisode(ctx, &tvmgmtv1.LookupEpisodeRequest{
+		TmdbId: 1396, SeasonNumber: 5, EpisodeNumber: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Found || resp.EpisodeTitle != "Live Free or Die" || resp.AirDate != "2012-07-15" {
+		t.Fatalf("lookup: %+v", resp)
+	}
+	if resp.SeriesName != "Breaking Bad" {
+		t.Errorf("series name: %s", resp.SeriesName)
+	}
+
+	multi, err := m.LookupEpisode(ctx, &tvmgmtv1.LookupEpisodeRequest{
+		TmdbId: 1396, SeasonNumber: 5, EpisodeNumbers: []int32{1, 2},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !multi.Found || multi.EpisodeTitle != "Live Free or Die + Madrigal" {
+		t.Fatalf("multi: %+v", multi)
+	}
+
+	miss, err := m.LookupEpisode(ctx, &tvmgmtv1.LookupEpisodeRequest{
+		Title: "No Such Show", SeasonNumber: 1, EpisodeNumber: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if miss.Found {
+		t.Fatal("expected not found")
 	}
 }

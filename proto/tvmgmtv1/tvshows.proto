@@ -19,6 +19,10 @@ service TvManagementService {
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc SetItemTags(SetItemTagsRequest) returns (SetItemTagsResponse);
   rpc GetCalendar(GetCalendarRequest) returns (GetCalendarResponse);
+  rpc ListAlternateTitles(ListAlternateTitlesRequest) returns (ListAlternateTitlesResponse);
+  rpc AddAlternateTitle(AddAlternateTitleRequest) returns (AddAlternateTitleResponse);
+  rpc RemoveAlternateTitle(RemoveAlternateTitleRequest) returns (RemoveAlternateTitleResponse);
+  rpc LookupEpisode(LookupEpisodeRequest) returns (LookupEpisodeResponse);
 }
 
 message AddTVShowRequest {
@@ -266,3 +270,58 @@ message CalendarItem {
   bool monitored = 9;
   bool has_file = 10;
 }
+
+message LookupEpisodeRequest {
+  int32 tmdb_id = 1;
+  string title = 2;
+  int32 year = 3;
+  int32 season_number = 4;
+  int32 episode_number = 5;
+  repeated int32 episode_numbers = 6;
+  int32 absolute_number = 7;
+  string air_date = 8; // YYYY-MM-DD for daily
+}
+
+message LookupEpisodeResponse {
+  string series_id = 1;
+  string series_name = 2;
+  string original_name = 3;
+  string episode_title = 4; // multi: "A + B"
+  string air_date = 5;
+  int32 season_number = 6;
+  int32 episode_number = 7;
+  int32 absolute_number = 8;
+  bool found = 9;
+}
+
+message ListAlternateTitlesRequest {
+  string series_id = 1;
+}
+
+message AlternateTitle {
+  string id = 1;
+  string title = 2;
+  string clean_title = 3;
+  string source = 4;
+}
+
+message ListAlternateTitlesResponse {
+  repeated AlternateTitle titles = 1;
+}
+
+message AddAlternateTitleRequest {
+  string series_id = 1;
+  string title = 2;
+}
+
+message AddAlternateTitleResponse {
+  AlternateTitle title = 1;
+}
+
+message RemoveAlternateTitleRequest {
+  string series_id = 1;
+  string title_id = 2;
+}
+
+message RemoveAlternateTitleResponse {}
+
