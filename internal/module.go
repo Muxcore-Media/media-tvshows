@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,7 +17,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
@@ -98,7 +101,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 		Roles:        []string{"media_manager"},
 		Description:  "TV show library manager with TMDB metadata import and admin UI integration",
 		Author:       "MuxCore",
-		Capabilities: []string{"media.library"},
+		Capabilities: []string{"media.library", "media.library.tv"},
 		Contracts: []contracts.ContractDeclaration{
 			{
 				Repo:      "github.com/Muxcore-Media/contracts-media-admin",
@@ -150,12 +153,25 @@ func (m *Module) Init(ctx context.Context) error {
 			monitored     INTEGER DEFAULT 1,
 			total_seasons   INTEGER DEFAULT 0,
 			total_episodes  INTEGER DEFAULT 0,
+			quality_profile_id TEXT DEFAULT '',
+			root_folder_path   TEXT DEFAULT '',
+			series_type   TEXT DEFAULT 'standard',
 			created_at    TEXT NOT NULL,
 			updated_at    TEXT NOT NULL
 		)
 	`); err != nil {
 		db.Close()
 		return fmt.Errorf("create series table: %w", err)
+	}
+	for _, col := range []string{
+		`ALTER TABLE series ADD COLUMN quality_profile_id TEXT DEFAULT ''`,
+		`ALTER TABLE series ADD COLUMN root_folder_path TEXT DEFAULT ''`,
+		`ALTER TABLE series ADD COLUMN series_type TEXT DEFAULT 'standard'`,
+	} {
+		if _, err := db.ExecContext(ctx, col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			db.Close()
+			return fmt.Errorf("migrate series: %w", err)
+		}
 	}
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS seasons (
@@ -243,6 +259,26 @@ func (m *Module) Init(ctx context.Context) error {
 	`); err != nil {
 		db.Close()
 		return fmt.Errorf("create episode files index: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS tags (
+			id TEXT PRIMARY KEY,
+			label TEXT UNIQUE NOT NULL,
+			created_at TEXT NOT NULL
+		)
+	`); err != nil {
+		db.Close()
+		return fmt.Errorf("create tags table: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS item_tags (
+			item_id TEXT NOT NULL,
+			tag_id TEXT NOT NULL,
+			PRIMARY KEY (item_id, tag_id)
+		)
+	`); err != nil {
+		db.Close()
+		return fmt.Errorf("create item_tags table: %w", err)
 	}
 
 	m.mu.Lock()
@@ -375,48 +411,356 @@ func (m *Module) subscribeToFileImported() {
 			if err := json.Unmarshal(evt.Payload, &p); err != nil || p.MediaType != "tv" {
 				continue
 			}
-			m.mu.RLock()
-			var seriesID string
-			m.db.QueryRow(
-				`SELECT id FROM series WHERE name = ? AND (year = ? OR ? = 0) LIMIT 1`,
-				p.Title, p.Year, p.Year,
-			).Scan(&seriesID)
-			m.mu.RUnlock()
-			if seriesID == "" {
-				slog.Debug("no matching series for imported file", "title", p.Title)
-				continue
+			if err := m.handleFileImported(context.Background(), p); err != nil {
+				slog.Debug("handle imported tv file", "title", p.Title, "error", err)
 			}
-			m.mu.RLock()
-			var episodeID string
-			m.db.QueryRow(
-				`SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
-				seriesID, p.SeasonNumber, p.EpisodeNumber,
-			).Scan(&episodeID)
-			m.mu.RUnlock()
-			if episodeID == "" {
-				slog.Debug("no matching episode for imported file", "title", p.Title, "s", p.SeasonNumber, "e", p.EpisodeNumber)
-				continue
-			}
-			qualityStr := p.Quality
-			if qualityStr == "" {
-				qualityStr = "Unknown"
-			}
-			ext := filepath.Ext(p.DestinationPath)
-			container := "mkv"
-			if ext != "" {
-				container = ext[1:]
-			}
-			m.AddEpisodeFile(context.Background(), &tvmgmtv1.AddEpisodeFileRequest{
-				EpisodeId: episodeID,
-				FilePath:  p.DestinationPath,
-				Quality:   qualityStr,
-				SizeBytes: 0,
-				Container: container,
-			})
 		}
 		cancel()
 	}()
 	slog.Info("subscribed to file imported events")
+}
+
+func (m *Module) handleFileImported(ctx context.Context, p contracts.FileImportedPayload) error {
+	seriesID, tmdbID, err := m.resolveSeriesForImport(ctx, p)
+	if err != nil {
+		return err
+	}
+	if seriesID == "" {
+		return fmt.Errorf("no matching series for %q", p.Title)
+	}
+
+	episodeIDs := m.resolveImportEpisodeIDs(ctx, seriesID, tmdbID, p)
+	if len(episodeIDs) == 0 {
+		return fmt.Errorf("no matching episode for %q S%dE%d abs=%d", p.Title, p.SeasonNumber, p.EpisodeNumber, p.AbsoluteNumber)
+	}
+
+	qualityStr := p.Quality
+	if qualityStr == "" {
+		qualityStr = "Unknown"
+	}
+	filePath := p.StorageKey
+	if filePath == "" {
+		filePath = p.DestinationPath
+	}
+	_, err = m.AddEpisodeFile(ctx, &tvmgmtv1.AddEpisodeFileRequest{
+		EpisodeId:  episodeIDs[0],
+		EpisodeIds: episodeIDs,
+		FilePath:   filePath,
+		Quality:    qualityStr,
+	})
+	return err
+}
+
+func normalizeSeriesType(st string) (string, error) {
+	st = strings.TrimSpace(strings.ToLower(st))
+	if st == "" {
+		return "standard", nil
+	}
+	switch st {
+	case "standard", "daily", "anime":
+		return st, nil
+	default:
+		return "", fmt.Errorf("invalid series_type %q (want standard, daily, or anime)", st)
+	}
+}
+
+func (m *Module) resolveImportEpisodeIDs(ctx context.Context, seriesID string, tmdbID int32, p contracts.FileImportedPayload) []string {
+	seriesType := m.getSeriesType(seriesID)
+	epNums := p.EpisodeNumbers
+	if len(epNums) == 0 && p.EpisodeNumber > 0 {
+		epNums = []int32{p.EpisodeNumber}
+	}
+
+	var ids []string
+	if seriesType == "anime" && p.AbsoluteNumber > 0 {
+		if id := m.findEpisodeIDByAbsolute(seriesID, p.AbsoluteNumber); id != "" {
+			return []string{id}
+		}
+		if tmdbID != 0 {
+			m.populateSeasonsFromMetadata(ctx, seriesID, tmdbID)
+			if id := m.findEpisodeIDByAbsolute(seriesID, p.AbsoluteNumber); id != "" {
+				return []string{id}
+			}
+		}
+	}
+
+	if seriesType == "daily" && p.AirDate != "" {
+		if id := m.findEpisodeIDByAirDate(seriesID, p.AirDate); id != "" {
+			return []string{id}
+		}
+		if tmdbID != 0 {
+			m.populateSeasonsFromMetadata(ctx, seriesID, tmdbID)
+			if id := m.findEpisodeIDByAirDate(seriesID, p.AirDate); id != "" {
+				return []string{id}
+			}
+		}
+	}
+
+	if len(epNums) == 0 && p.AbsoluteNumber > 0 {
+		if id := m.findEpisodeIDByAbsolute(seriesID, p.AbsoluteNumber); id != "" {
+			return []string{id}
+		}
+	}
+
+	needPopulate := false
+	for _, ep := range epNums {
+		if m.findEpisodeID(seriesID, p.SeasonNumber, ep) == "" {
+			needPopulate = true
+			break
+		}
+	}
+	if needPopulate && tmdbID != 0 {
+		m.populateSeasonsFromMetadata(ctx, seriesID, tmdbID)
+	}
+	for _, ep := range epNums {
+		id := m.findEpisodeID(seriesID, p.SeasonNumber, ep)
+		if id == "" {
+			id = m.ensureStubEpisode(ctx, seriesID, p.SeasonNumber, ep)
+		}
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func (m *Module) getSeriesType(seriesID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.db == nil {
+		return "standard"
+	}
+	var st string
+	_ = m.db.QueryRow(`SELECT COALESCE(series_type, 'standard') FROM series WHERE id = ?`, seriesID).Scan(&st)
+	if st == "" {
+		return "standard"
+	}
+	return st
+}
+
+func (m *Module) resolveSeriesForImport(ctx context.Context, p contracts.FileImportedPayload) (seriesID string, tmdbID int32, err error) {
+	if id, tid := m.findSeries(p.TMDBID, p.Title, p.Year); id != "" {
+		return id, tid, nil
+	}
+	tmdbID = p.TMDBID
+	name := p.Title
+	year := p.Year
+	overview := ""
+	poster := ""
+	backdrop := ""
+	var genres []string
+
+	if tmdbID == 0 {
+		result, searchErr := m.searchTVMetadata(ctx, p.Title, p.Year)
+		if searchErr != nil {
+			return "", 0, searchErr
+		}
+		if result == nil {
+			return "", 0, nil
+		}
+		tmdbID = result.GetId()
+		name = result.GetName()
+		if name == "" {
+			name = result.GetOriginalTitle()
+		}
+		if name == "" {
+			name = result.GetTitle()
+		}
+		year = extractYear(result.GetFirstAirDate())
+		overview = result.GetOverview()
+		poster = result.GetPosterPath()
+		backdrop = result.GetBackdropPath()
+	}
+
+	if id, tid := m.findSeries(tmdbID, name, year); id != "" {
+		return id, tid, nil
+	}
+
+	resp, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{
+		TmdbId:       tmdbID,
+		Name:         name,
+		Year:         year,
+		Overview:     overview,
+		PosterPath:   poster,
+		BackdropPath: backdrop,
+		Genres:       genres,
+	})
+	if err != nil {
+		return "", 0, err
+	}
+	return resp.GetSeriesId(), tmdbID, nil
+}
+
+func (m *Module) findSeries(tmdbID int32, title string, year int32) (string, int32) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.db == nil {
+		return "", 0
+	}
+	var id string
+	var tid int32
+	if tmdbID != 0 {
+		_ = m.db.QueryRow(`SELECT id, tmdb_id FROM series WHERE tmdb_id = ? LIMIT 1`, tmdbID).Scan(&id, &tid)
+		if id != "" {
+			return id, tid
+		}
+	}
+	norm := normalizeTitle(title)
+	if norm == "" {
+		return "", 0
+	}
+	rows, err := m.db.Query(`SELECT id, tmdb_id, name, year FROM series`)
+	if err != nil {
+		return "", 0
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rowID, rowName string
+		var rowTMDB, rowYear int32
+		if err := rows.Scan(&rowID, &rowTMDB, &rowName, &rowYear); err != nil {
+			continue
+		}
+		if normalizeTitle(rowName) != norm {
+			continue
+		}
+		if year == 0 || rowYear == 0 || rowYear == year {
+			return rowID, rowTMDB
+		}
+	}
+	return "", 0
+}
+
+func (m *Module) findEpisodeID(seriesID string, season, episode int32) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.db == nil {
+		return ""
+	}
+	var id string
+	_ = m.db.QueryRow(
+		`SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
+		seriesID, season, episode,
+	).Scan(&id)
+	return id
+}
+
+func (m *Module) findEpisodeIDByAbsolute(seriesID string, absolute int32) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.db == nil || absolute < 1 {
+		return ""
+	}
+	var id string
+	_ = m.db.QueryRow(
+		`SELECT id FROM episodes WHERE series_id = ? AND absolute_number = ? LIMIT 1`,
+		seriesID, absolute,
+	).Scan(&id)
+	return id
+}
+
+func (m *Module) findEpisodeIDByAirDate(seriesID, airDate string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.db == nil || airDate == "" {
+		return ""
+	}
+	var id string
+	_ = m.db.QueryRow(
+		`SELECT id FROM episodes WHERE series_id = ? AND air_date = ? LIMIT 1`,
+		seriesID, airDate,
+	).Scan(&id)
+	return id
+}
+
+func (m *Module) ensureStubEpisode(ctx context.Context, seriesID string, season, episode int32) string {
+	if season < 0 || episode < 1 {
+		return ""
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.db == nil {
+		return ""
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	seasonID := fmt.Sprintf("sea_%s_%d", seriesID, season)
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO seasons (id, series_id, season_number, name, monitored, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, 1, ?, ?)`,
+		seasonID, seriesID, season, fmt.Sprintf("Season %d", season), now, now,
+	)
+	episodeID := fmt.Sprintf("ep_%s_%d_%d", seriesID, season, episode)
+	_, err := m.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO episodes (id, series_id, season_id, episode_number, season_number, name, monitored, has_file, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+		episodeID, seriesID, seasonID, episode, season, fmt.Sprintf("Episode %d", episode), now, now,
+	)
+	if err != nil {
+		return ""
+	}
+	var id string
+	_ = m.db.QueryRow(
+		`SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
+		seriesID, season, episode,
+	).Scan(&id)
+	return id
+}
+
+func (m *Module) searchTVMetadata(ctx context.Context, title string, year int32) (*metadatav1.SearchResult, error) {
+	metaAddr, err := m.findMetadataModule(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := grpc.NewClient(metaAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("dial metadata: %w", err)
+	}
+	defer conn.Close()
+
+	metaClient := metadatav1.NewMetadataServiceClient(conn)
+	resp, err := metaClient.Search(ctx, &metadatav1.SearchRequest{
+		Query: title,
+		Type:  metadatav1.MediaType_MEDIA_TYPE_TV,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("metadata search: %w", err)
+	}
+	return pickBestSearchResult(resp.GetResults(), year, false), nil
+}
+
+func normalizeTitle(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+func pickBestSearchResult(results []*metadatav1.SearchResult, year int32, movie bool) *metadatav1.SearchResult {
+	if len(results) == 0 {
+		return nil
+	}
+	var best *metadatav1.SearchResult
+	for _, r := range results {
+		if movie && r.GetMediaType() != metadatav1.MediaType_MEDIA_TYPE_UNSPECIFIED &&
+			r.GetMediaType() != metadatav1.MediaType_MEDIA_TYPE_MOVIE {
+			continue
+		}
+		if !movie && r.GetMediaType() != metadatav1.MediaType_MEDIA_TYPE_UNSPECIFIED &&
+			r.GetMediaType() != metadatav1.MediaType_MEDIA_TYPE_TV {
+			continue
+		}
+		date := r.GetReleaseDate()
+		if !movie {
+			date = r.GetFirstAirDate()
+		}
+		ry := extractYear(date)
+		if year != 0 && ry != 0 && ry != year {
+			continue
+		}
+		if best == nil || r.GetPopularity() > best.GetPopularity() {
+			best = r
+		}
+	}
+	if best != nil {
+		return best
+	}
+	return results[0]
 }
 
 func (m *Module) findMetadataModule(ctx context.Context) (string, error) {
@@ -439,9 +783,18 @@ func (m *Module) findMetadataModule(ctx context.Context) (string, error) {
 
 func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) (*tvmgmtv1.AddTVShowResponse, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if m.db == nil {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("not initialized")
+	}
+
+	var existingID string
+	if req.GetTmdbId() != 0 {
+		_ = m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE tmdb_id = ? LIMIT 1`, req.GetTmdbId()).Scan(&existingID)
+		if existingID != "" {
+			m.mu.Unlock()
+			return &tvmgmtv1.AddTVShowResponse{SeriesId: existingID}, nil
+		}
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -449,16 +802,32 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 
 	genresJSON, _ := json.Marshal(req.GetGenres())
 
-	_, err := m.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO series (id, tmdb_id, name, year, overview, poster_path, backdrop_path, genres, monitored, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+	seriesType, err := normalizeSeriesType(req.GetSeriesType())
+	if err != nil {
+		m.mu.Unlock()
+		return nil, err
+	}
+
+	_, err = m.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO series (id, tmdb_id, name, year, overview, poster_path, backdrop_path, genres, monitored, quality_profile_id, root_folder_path, series_type, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
 		id, req.GetTmdbId(), req.GetName(), req.GetYear(),
 		req.GetOverview(), req.GetPosterPath(), req.GetBackdropPath(),
-		string(genresJSON), now, now,
+		string(genresJSON), req.GetQualityProfileId(), req.GetRootFolderPath(), seriesType, now, now,
 	)
 	if err != nil {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("insert series: %w", err)
 	}
+
+	_ = m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE tmdb_id = ? LIMIT 1`, req.GetTmdbId()).Scan(&existingID)
+	if existingID != "" && existingID != id {
+		m.mu.Unlock()
+		return &tvmgmtv1.AddTVShowResponse{SeriesId: existingID}, nil
+	}
+	m.mu.Unlock()
+
+	m.persistCachedArtwork(ctx, id, req.GetPosterPath(), req.GetBackdropPath())
 
 	go m.publish(context.Background(), contracts.EventTVAdded, map[string]interface{}{
 		"series_id": id, "tmdb_id": req.GetTmdbId(), "name": req.GetName(),
@@ -469,6 +838,92 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 	return &tvmgmtv1.AddTVShowResponse{SeriesId: id}, nil
 }
 
+func (m *Module) UpdateTVShow(ctx context.Context, req *tvmgmtv1.UpdateTVShowRequest) (*tvmgmtv1.UpdateTVShowResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.db == nil {
+		return nil, fmt.Errorf("not initialized")
+	}
+	if req.GetSeriesId() == "" {
+		return nil, fmt.Errorf("series_id required")
+	}
+
+	var sets []string
+	var args []any
+	if req.QualityProfileId != nil {
+		sets = append(sets, `quality_profile_id = ?`)
+		args = append(args, req.GetQualityProfileId())
+	}
+	if req.RootFolderPath != nil {
+		sets = append(sets, `root_folder_path = ?`)
+		args = append(args, req.GetRootFolderPath())
+	}
+	if req.Monitored != nil {
+		monitored := 0
+		if req.GetMonitored() {
+			monitored = 1
+		}
+		sets = append(sets, `monitored = ?`)
+		args = append(args, monitored)
+	}
+	if req.SeriesType != nil {
+		st, err := normalizeSeriesType(req.GetSeriesType())
+		if err != nil {
+			return nil, err
+		}
+		sets = append(sets, `series_type = ?`)
+		args = append(args, st)
+	}
+	if len(sets) == 0 {
+		series := m.getSeriesLocked(ctx, req.GetSeriesId())
+		if series == nil {
+			return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
+		}
+		return &tvmgmtv1.UpdateTVShowResponse{Series: series}, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	sets = append(sets, `updated_at = ?`)
+	args = append(args, now, req.GetSeriesId())
+	res, err := m.db.ExecContext(ctx,
+		`UPDATE series SET `+strings.Join(sets, `, `)+` WHERE id = ?`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update series: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
+	}
+
+	if req.Monitored != nil {
+		monitored := 0
+		if req.GetMonitored() {
+			monitored = 1
+		}
+		_, _ = m.db.ExecContext(ctx, `UPDATE seasons SET monitored = ?, updated_at = ? WHERE series_id = ?`, monitored, now, req.GetSeriesId())
+		_, _ = m.db.ExecContext(ctx, `UPDATE episodes SET monitored = ?, updated_at = ? WHERE series_id = ?`, monitored, now, req.GetSeriesId())
+	}
+
+	series := m.getSeriesLocked(ctx, req.GetSeriesId())
+	if series == nil {
+		return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
+	}
+	return &tvmgmtv1.UpdateTVShowResponse{Series: series}, nil
+}
+
+func (m *Module) getSeriesLocked(ctx context.Context, seriesID string) *tvmgmtv1.TVSeries {
+	row := m.db.QueryRowContext(ctx,
+		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
+		 status, network, first_air_date, last_air_date, vote_average, genres,
+		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		seriesID,
+	)
+	return m.scanSingleSeries(row)
+}
+
 func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowRequest) (*tvmgmtv1.RemoveTVShowResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -476,7 +931,38 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 		return nil, fmt.Errorf("not initialized")
 	}
 
-	_, err := m.db.ExecContext(ctx, `DELETE FROM episodes WHERE series_id = ?`, req.GetSeriesId())
+	var rootFolder string
+	_ = m.db.QueryRowContext(ctx, `SELECT COALESCE(root_folder_path, '') FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&rootFolder)
+
+	filePaths := map[string]struct{}{}
+	rows, err := m.db.QueryContext(ctx,
+		`SELECT DISTINCT ef.file_path FROM episode_files ef
+		 INNER JOIN episodes e ON e.id = ef.episode_id
+		 WHERE e.series_id = ?`, req.GetSeriesId())
+	if err == nil {
+		for rows.Next() {
+			var p string
+			if rows.Scan(&p) == nil && p != "" {
+				filePaths[p] = struct{}{}
+			}
+		}
+		rows.Close()
+	}
+
+	if req.GetDeleteFiles() {
+		for p := range filePaths {
+			_ = safeDeleteMediaFile(p, rootFolder)
+		}
+	}
+
+	_, err = m.db.ExecContext(ctx,
+		`DELETE FROM episode_files WHERE episode_id IN (SELECT id FROM episodes WHERE series_id = ?)`,
+		req.GetSeriesId())
+	if err != nil {
+		return nil, fmt.Errorf("delete episode files: %w", err)
+	}
+	_, _ = m.db.ExecContext(ctx, `DELETE FROM item_tags WHERE item_id = ?`, req.GetSeriesId())
+	_, err = m.db.ExecContext(ctx, `DELETE FROM episodes WHERE series_id = ?`, req.GetSeriesId())
 	if err != nil {
 		return nil, fmt.Errorf("delete episodes: %w", err)
 	}
@@ -488,6 +974,8 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 	if err != nil {
 		return nil, fmt.Errorf("delete series: %w", err)
 	}
+
+	m.removeItemArtwork(req.GetSeriesId())
 
 	go m.publish(context.Background(), contracts.EventTVRemoved, map[string]interface{}{
 		"series_id": req.GetSeriesId(),
@@ -529,6 +1017,15 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 	genresJSON, _ := json.Marshal(details.GetGenres())
 	now := time.Now().UTC().Format(time.RFC3339)
 
+	posterSrc := details.GetPosterUrl()
+	if posterSrc == "" {
+		posterSrc = details.GetPosterPath()
+	}
+	backdropSrc := details.GetBackdropUrl()
+	if backdropSrc == "" {
+		backdropSrc = details.GetBackdropPath()
+	}
+
 	m.mu.Lock()
 	_, err = m.db.ExecContext(ctx,
 		`UPDATE series SET name=?, original_name=?, year=?, overview=?, tagline=?, status=?, first_air_date=?, last_air_date=?, vote_average=?, genres=?, poster_path=?, backdrop_path=?, total_seasons=?, total_episodes=?, updated_at=? WHERE id=?`,
@@ -545,7 +1042,11 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 		return nil, fmt.Errorf("update series: %w", err)
 	}
 
+	m.persistCachedArtwork(ctx, req.GetSeriesId(), posterSrc, backdropSrc)
+
 	m.populateSeasonsFromDB(ctx, req.GetSeriesId(), details)
+	m.populateEpisodesFromMetadata(ctx, metaClient, req.GetSeriesId(), tmdbID, details)
+	m.renumberAbsoluteEpisodes(ctx, req.GetSeriesId())
 
 	go m.publish(context.Background(), contracts.EventTVUpdated, map[string]interface{}{
 		"series_id": req.GetSeriesId(), "tmdb_id": tmdbID, "name": details.GetName(),
@@ -576,6 +1077,90 @@ func (m *Module) populateSeasonsFromDB(ctx context.Context, seriesID string, det
 			slog.Warn("upsert season", "error", err)
 		}
 	}
+}
+
+func (m *Module) populateEpisodesFromMetadata(ctx context.Context, metaClient metadatav1.MetadataServiceClient, seriesID string, tmdbID int32, details *metadatav1.GetTVDetailsResponse) {
+	for _, s := range details.GetSeasons() {
+		if s.GetSeasonNumber() < 0 {
+			continue
+		}
+		seasonResp, err := metaClient.GetSeasonDetails(ctx, &metadatav1.GetSeasonDetailsRequest{
+			TmdbId:       tmdbID,
+			SeasonNumber: s.GetSeasonNumber(),
+		})
+		if err != nil {
+			slog.Warn("fetch season details", "series", seriesID, "season", s.GetSeasonNumber(), "error", err)
+			continue
+		}
+		seasonID := fmt.Sprintf("sea_%s_%d", seriesID, s.GetSeasonNumber())
+		m.populateEpisodesFromSeason(ctx, seriesID, seasonID, s.GetSeasonNumber(), seasonResp.GetEpisodes())
+	}
+}
+
+func (m *Module) populateEpisodesFromSeason(ctx context.Context, seriesID, seasonID string, seasonNumber int32, episodes []*metadatav1.Episode) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	monitored := 1
+	var mon int
+	if err := m.db.QueryRowContext(ctx, `SELECT monitored FROM seasons WHERE id = ?`, seasonID).Scan(&mon); err == nil {
+		monitored = mon
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, e := range episodes {
+		if e.GetEpisodeNumber() < 1 {
+			continue
+		}
+		sn := e.GetSeasonNumber()
+		if sn == 0 {
+			sn = seasonNumber
+		}
+		episodeID := fmt.Sprintf("ep_%s_%d_%d", seriesID, sn, e.GetEpisodeNumber())
+		_, err := m.db.ExecContext(ctx,
+			`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, name, overview, air_date, still_path, monitored, has_file, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+			 ON CONFLICT(id) DO UPDATE SET tmdb_id=excluded.tmdb_id, name=excluded.name, overview=excluded.overview, air_date=excluded.air_date, still_path=excluded.still_path, season_id=excluded.season_id, updated_at=excluded.updated_at`,
+			episodeID, seriesID, seasonID, e.GetId(), e.GetEpisodeNumber(), sn,
+			e.GetName(), e.GetOverview(), e.GetAirDate(), e.GetStillPath(),
+			monitored, now, now,
+		)
+		if err != nil {
+			slog.Warn("upsert episode", "error", err, "episode", episodeID)
+		}
+	}
+}
+
+func (m *Module) renumberAbsoluteEpisodes(ctx context.Context, seriesID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.db == nil {
+		return
+	}
+	rows, err := m.db.QueryContext(ctx,
+		`SELECT id FROM episodes WHERE series_id = ? AND season_number > 0
+		 ORDER BY season_number ASC, episode_number ASC`,
+		seriesID,
+	)
+	if err != nil {
+		slog.Warn("renumber absolute query", "error", err)
+		return
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i, id := range ids {
+		_, _ = m.db.ExecContext(ctx, `UPDATE episodes SET absolute_number = ?, updated_at = ? WHERE id = ?`, i+1, now, id)
+	}
+	_, _ = m.db.ExecContext(ctx, `UPDATE episodes SET absolute_number = 0, updated_at = ? WHERE series_id = ? AND season_number <= 0`, now, seriesID)
 }
 
 func extractYear(dateStr string) int32 {
@@ -611,6 +1196,8 @@ func (m *Module) populateSeasonsFromMetadata(ctx context.Context, seriesID strin
 	}
 
 	m.populateSeasonsFromDB(ctx, seriesID, details)
+	m.populateEpisodesFromMetadata(ctx, metaClient, seriesID, tmdbID, details)
+	m.renumberAbsoluteEpisodes(ctx, seriesID)
 }
 
 func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsRequest) (*tvmgmtv1.ListTVShowsResponse, error) {
@@ -633,7 +1220,7 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	query := `SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		status, network, first_air_date, last_air_date, vote_average, genres,
 		poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		created_at, updated_at FROM series`
+		quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series`
 	countQuery := `SELECT COUNT(*) FROM series`
 
 	var args []any
@@ -646,6 +1233,10 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	if req.GetGenre() != "" {
 		where = append(where, `genres LIKE ?`)
 		args = append(args, `%"`+req.GetGenre()+`"%`)
+	}
+	if req.GetTagId() != "" {
+		where = append(where, `id IN (SELECT item_id FROM item_tags WHERE tag_id = ?)`)
+		args = append(args, req.GetTagId())
 	}
 	if len(where) > 0 {
 		clause := ` WHERE ` + strings.Join(where, ` AND `)
@@ -696,6 +1287,74 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	}, nil
 }
 
+func (m *Module) ListMissing(ctx context.Context, req *tvmgmtv1.ListMissingRequest) (*tvmgmtv1.ListMissingResponse, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.db == nil {
+		return nil, fmt.Errorf("not initialized")
+	}
+
+	page := int(req.GetPage())
+	if page < 1 {
+		page = 1
+	}
+	pageSize := int(req.GetPageSize())
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 100
+	}
+	offset := (page - 1) * pageSize
+
+	where := `WHERE e.monitored = 1 AND e.has_file = 0 AND (e.air_date = '' OR e.air_date <= date('now'))`
+	var args []any
+	if req.GetSeriesId() != "" {
+		where += ` AND e.series_id = ?`
+		args = append(args, req.GetSeriesId())
+	}
+
+	countQuery := `SELECT COUNT(*) FROM episodes e ` + where
+	var total int
+	if err := m.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count missing episodes: %w", err)
+	}
+
+	query := `SELECT e.id, e.series_id, s.tmdb_id, s.name, s.year, e.season_number, e.episode_number, s.quality_profile_id,
+		e.air_date, e.absolute_number, COALESCE(s.series_type, 'standard')
+		FROM episodes e
+		JOIN series s ON s.id = e.series_id
+		` + where + `
+		ORDER BY s.name ASC, e.season_number ASC, e.episode_number ASC
+		LIMIT ? OFFSET ?`
+	qargs := append(args, pageSize, offset)
+
+	rows, err := m.db.QueryContext(ctx, query, qargs...)
+	if err != nil {
+		return nil, fmt.Errorf("query missing episodes: %w", err)
+	}
+	defer rows.Close()
+
+	var items []*tvmgmtv1.MissingEpisodeItem
+	for rows.Next() {
+		var episodeID, seriesID, title, profileID, airDate, seriesType string
+		var tmdbID, year, seasonNum, epNum, absNum int64
+		if err := rows.Scan(&episodeID, &seriesID, &tmdbID, &title, &year, &seasonNum, &epNum, &profileID, &airDate, &absNum, &seriesType); err != nil {
+			slog.Error("scan missing episode", "error", err)
+			continue
+		}
+		items = append(items, &tvmgmtv1.MissingEpisodeItem{
+			EpisodeId: episodeID, SeriesId: seriesID,
+			TmdbId: int32(tmdbID), Title: title, Year: int32(year),
+			SeasonNumber: int32(seasonNum), EpisodeNumber: int32(epNum),
+			QualityProfileId: profileID, AirDate: airDate,
+			AbsoluteNumber: int32(absNum), SeriesType: seriesType,
+		})
+	}
+
+	return &tvmgmtv1.ListMissingResponse{
+		Items: items, Total: int32(total),
+		Page: int32(page), PageSize: int32(pageSize),
+	}, nil
+}
+
 func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) (*tvmgmtv1.GetTVShowResponse, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -707,7 +1366,7 @@ func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) 
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 created_at, updated_at FROM series WHERE id = ?`,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
 		req.GetSeriesId(),
 	)
 
@@ -787,23 +1446,38 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 		return nil, fmt.Errorf("not initialized")
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
-	id := fmt.Sprintf("ef_%d", time.Now().UnixNano())
-
-	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO episode_files (id, episode_id, file_path, quality, size_bytes, container, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, req.GetEpisodeId(), req.GetFilePath(), req.GetQuality(), req.GetSizeBytes(), req.GetContainer(), now,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("insert episode file: %w", err)
+	episodeIDs := req.GetEpisodeIds()
+	if len(episodeIDs) == 0 && req.GetEpisodeId() != "" {
+		episodeIDs = []string{req.GetEpisodeId()}
 	}
-	m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, req.GetEpisodeId())
+	if len(episodeIDs) == 0 {
+		return nil, fmt.Errorf("episode_id required")
+	}
 
-	go m.publish(context.Background(), contracts.EventTVEpisodeFileAdded, map[string]interface{}{
-		"file_id": id, "episode_id": req.GetEpisodeId(), "file_path": req.GetFilePath(),
-	})
+	now := time.Now().UTC().Format(time.RFC3339)
+	var firstFileID string
+	for _, episodeID := range episodeIDs {
+		id := fmt.Sprintf("ef_%d", time.Now().UnixNano())
+		if firstFileID == "" {
+			firstFileID = id
+		}
+		_, err := m.db.ExecContext(ctx,
+			`INSERT INTO episode_files (id, episode_id, file_path, quality, size_bytes, container, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			id, episodeID, req.GetFilePath(), req.GetQuality(), req.GetSizeBytes(), req.GetContainer(), now,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert episode file: %w", err)
+		}
+		m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, episodeID)
 
-	return &tvmgmtv1.AddEpisodeFileResponse{FileId: id}, nil
+		epID := episodeID
+		fileID := id
+		go m.publish(context.Background(), contracts.EventTVEpisodeFileAdded, map[string]interface{}{
+			"file_id": fileID, "episode_id": epID, "file_path": req.GetFilePath(),
+		})
+	}
+
+	return &tvmgmtv1.AddEpisodeFileResponse{FileId: firstFileID}, nil
 }
 
 func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpisodeFileRequest) (*tvmgmtv1.RemoveEpisodeFileResponse, error) {
@@ -813,18 +1487,52 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 		return nil, fmt.Errorf("not initialized")
 	}
 
-	var episodeID string
-	m.db.QueryRowContext(ctx, `SELECT episode_id FROM episode_files WHERE id = ?`, req.GetFileId()).Scan(&episodeID)
-	_, err := m.db.ExecContext(ctx, `DELETE FROM episode_files WHERE id = ?`, req.GetFileId())
+	var filePath string
+	_ = m.db.QueryRowContext(ctx, `SELECT file_path FROM episode_files WHERE id = ?`, req.GetFileId()).Scan(&filePath)
+	if filePath == "" {
+		_, err := m.db.ExecContext(ctx, `DELETE FROM episode_files WHERE id = ?`, req.GetFileId())
+		if err != nil {
+			return nil, fmt.Errorf("delete file: %w", err)
+		}
+		return &tvmgmtv1.RemoveEpisodeFileResponse{}, nil
+	}
+
+	rows, err := m.db.QueryContext(ctx, `SELECT DISTINCT episode_id FROM episode_files WHERE file_path = ?`, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("query linked episodes: %w", err)
+	}
+	var episodeIDs []string
+	for rows.Next() {
+		var epID string
+		if rows.Scan(&epID) == nil && epID != "" {
+			episodeIDs = append(episodeIDs, epID)
+		}
+	}
+	rows.Close()
+
+	if req.GetDeleteFiles() {
+		var rootFolder string
+		if len(episodeIDs) > 0 {
+			_ = m.db.QueryRowContext(ctx,
+				`SELECT COALESCE(s.root_folder_path, '') FROM series s
+				 INNER JOIN episodes e ON e.series_id = s.id WHERE e.id = ? LIMIT 1`,
+				episodeIDs[0],
+			).Scan(&rootFolder)
+		}
+		_ = safeDeleteMediaFile(filePath, rootFolder)
+	}
+
+	_, err = m.db.ExecContext(ctx, `DELETE FROM episode_files WHERE file_path = ?`, filePath)
 	if err != nil {
 		return nil, fmt.Errorf("delete file: %w", err)
 	}
 
-	if episodeID != "" {
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, episodeID := range episodeIDs {
 		var count int
 		m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM episode_files WHERE episode_id = ?`, episodeID).Scan(&count)
 		if count == 0 {
-			m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 0, updated_at = ? WHERE id = ?`, time.Now().UTC().Format(time.RFC3339), episodeID)
+			m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 0, updated_at = ? WHERE id = ?`, now, episodeID)
 		}
 	}
 
@@ -886,7 +1594,7 @@ func (m *Module) loadEpisodes(ctx context.Context, seasonID string) ([]*tvmgmtv1
 // ── Scan helpers ───────────────────────────────────────────────
 
 func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, createdAt, updatedAt string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -894,7 +1602,7 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 	err := rows.Scan(&id, &tmdbID, &name, &originalName, &year, &overview, &tagline,
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
-		&createdAt, &updatedAt)
+		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt)
 	if err != nil {
 		slog.Error("scan series row", "error", err)
 		return nil
@@ -912,6 +1620,9 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 			yearVal = int32(y)
 		}
 	}
+	if seriesType == "" {
+		seriesType = "standard"
+	}
 
 	return &tvmgmtv1.TVSeries{
 		Id: id, TmdbId: int32(tmdbID),
@@ -923,12 +1634,14 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 		PosterPath: posterPath, BackdropPath: backdropPath,
 		Monitored:    monitored != 0,
 		TotalSeasons: int32(totalSeasons), TotalEpisodes: int32(totalEpisodes),
-		CreatedAt: createdAt, UpdatedAt: updatedAt,
+		QualityProfileId: qualityProfileID, RootFolderPath: rootFolderPath,
+		SeriesType: seriesType,
+		CreatedAt:  createdAt, UpdatedAt: updatedAt,
 	}
 }
 
 func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, createdAt, updatedAt string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -936,7 +1649,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 	err := row.Scan(&id, &tmdbID, &name, &originalName, &year, &overview, &tagline,
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
-		&createdAt, &updatedAt)
+		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt)
 	if err != nil {
 		return nil
 	}
@@ -953,6 +1666,9 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 			yearVal = int32(y)
 		}
 	}
+	if seriesType == "" {
+		seriesType = "standard"
+	}
 
 	return &tvmgmtv1.TVSeries{
 		Id: id, TmdbId: int32(tmdbID),
@@ -964,7 +1680,9 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 		PosterPath: posterPath, BackdropPath: backdropPath,
 		Monitored:    monitored != 0,
 		TotalSeasons: int32(totalSeasons), TotalEpisodes: int32(totalEpisodes),
-		CreatedAt: createdAt, UpdatedAt: updatedAt,
+		QualityProfileId: qualityProfileID, RootFolderPath: rootFolderPath,
+		SeriesType: seriesType,
+		CreatedAt:  createdAt, UpdatedAt: updatedAt,
 	}
 }
 
@@ -1051,7 +1769,7 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	query := `SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		status, network, first_air_date, last_air_date, vote_average, genres,
 		poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		created_at, updated_at FROM series`
+		quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series`
 	countQuery := `SELECT COUNT(*) FROM series`
 
 	var args []any
@@ -1093,7 +1811,7 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	for rows.Next() {
 		s := m.scanSeries(rows)
 		if s != nil {
-			items = append(items, seriesToMediaItem(s))
+			items = append(items, m.seriesToMediaItem(s))
 		}
 	}
 
@@ -1116,7 +1834,7 @@ func (m *Module) GetItem(ctx context.Context, req *mediaadminv1.GetItemRequest) 
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 created_at, updated_at FROM series WHERE id = ?`,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
 		req.GetId(),
 	)
 
@@ -1124,7 +1842,7 @@ func (m *Module) GetItem(ctx context.Context, req *mediaadminv1.GetItemRequest) 
 	if series == nil {
 		return nil, fmt.Errorf("series not found: %s", req.GetId())
 	}
-	return &mediaadminv1.GetItemResponse{Item: seriesToMediaItem(series)}, nil
+	return &mediaadminv1.GetItemResponse{Item: m.seriesToMediaItem(series)}, nil
 }
 
 func (m *Module) UpdateMetadata(ctx context.Context, req *mediaadminv1.UpdateMetadataRequest) (*mediaadminv1.UpdateMetadataResponse, error) {
@@ -1150,20 +1868,20 @@ func (m *Module) UpdateMetadata(ctx context.Context, req *mediaadminv1.UpdateMet
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 created_at, updated_at FROM series WHERE id = ?`,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
 		req.GetId(),
 	)
 	series := m.scanSingleSeries(row)
 	if series == nil {
 		return nil, fmt.Errorf("series not found after update: %s", req.GetId())
 	}
-	return &mediaadminv1.UpdateMetadataResponse{Item: seriesToMediaItem(series)}, nil
+	return &mediaadminv1.UpdateMetadataResponse{Item: m.seriesToMediaItem(series)}, nil
 }
 
 func (m *Module) ListArtwork(ctx context.Context, req *mediaadminv1.ListArtworkRequest) (*mediaadminv1.ListArtworkResponse, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	if m.db == nil {
+		m.mu.RUnlock()
 		return nil, fmt.Errorf("not initialized")
 	}
 
@@ -1172,45 +1890,147 @@ func (m *Module) ListArtwork(ctx context.Context, req *mediaadminv1.ListArtworkR
 	)
 	var poster, backdrop string
 	if err := row.Scan(&poster, &backdrop); err != nil {
+		m.mu.RUnlock()
 		return nil, fmt.Errorf("series not found: %s", req.GetId())
 	}
+	m.mu.RUnlock()
 
-	var artwork []*mediaadminv1.ArtworkInfo
-	if poster != "" {
-		artwork = append(artwork, &mediaadminv1.ArtworkInfo{
-			Id:     req.GetId() + "_poster",
-			ItemId: req.GetId(),
-			Type:   "poster",
-			Url:    fmt.Sprintf("http://%s/images/%s", m.httpAddr, poster),
-		})
+	poster = m.resolveServablePath(ctx, req.GetId(), "poster", poster)
+	backdrop = m.resolveServablePath(ctx, req.GetId(), "backdrop", backdrop)
+	return &mediaadminv1.ListArtworkResponse{
+		Artwork: m.buildArtworkInfos(req.GetId(), poster, backdrop),
+	}, nil
+}
+
+func (m *Module) DeleteItem(ctx context.Context, req *mediaadminv1.DeleteItemRequest) (*mediaadminv1.DeleteItemResponse, error) {
+	if req.GetId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "id required")
 	}
-	if backdrop != "" {
-		artwork = append(artwork, &mediaadminv1.ArtworkInfo{
-			Id:     req.GetId() + "_backdrop",
-			ItemId: req.GetId(),
-			Type:   "background",
-			Url:    fmt.Sprintf("http://%s/images/%s", m.httpAddr, backdrop),
-		})
+	m.mu.RLock()
+	var exists string
+	err := m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE id = ?`, req.GetId()).Scan(&exists)
+	m.mu.RUnlock()
+	if err != nil || exists == "" {
+		return nil, status.Errorf(codes.NotFound, "series not found: %s", req.GetId())
 	}
 
-	return &mediaadminv1.ListArtworkResponse{Artwork: artwork}, nil
+	if _, err := m.RemoveTVShow(ctx, &tvmgmtv1.RemoveTVShowRequest{
+		SeriesId:    req.GetId(),
+		DeleteFiles: req.GetDeleteFiles(),
+	}); err != nil {
+		return nil, err
+	}
+	return &mediaadminv1.DeleteItemResponse{}, nil
+}
+
+func (m *Module) RefreshItem(ctx context.Context, req *mediaadminv1.RefreshItemRequest) (*mediaadminv1.RefreshItemResponse, error) {
+	if req.GetId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "id required")
+	}
+	if _, err := m.RefreshMetadata(ctx, &tvmgmtv1.RefreshMetadataRequest{SeriesId: req.GetId()}); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, status.Errorf(codes.NotFound, "%v", err)
+		}
+		return nil, err
+	}
+	item, err := m.GetItem(ctx, &mediaadminv1.GetItemRequest{Id: req.GetId()})
+	if err != nil {
+		return nil, err
+	}
+	return &mediaadminv1.RefreshItemResponse{Item: item.Item}, nil
 }
 
 func (m *Module) ReplaceArtwork(stream grpc.ClientStreamingServer[mediaadminv1.ReplaceArtworkRequest, mediaadminv1.ReplaceArtworkResponse]) error {
-	slog.Warn("ReplaceArtwork not yet implemented")
-	return nil
+	ctx := stream.Context()
+	var itemID, artworkType, filename string
+	var buf []byte
+
+	for {
+		msg, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		switch {
+		case msg.GetItemId() != "":
+			itemID = msg.GetItemId()
+		case msg.GetArtworkType() != "":
+			artworkType = msg.GetArtworkType()
+		case msg.GetFilename() != "":
+			filename = msg.GetFilename()
+		default:
+			chunk := msg.GetChunk()
+			if len(chunk) == 0 {
+				continue
+			}
+			if len(buf)+len(chunk) > maxArtworkBytes {
+				return status.Errorf(codes.InvalidArgument, "artwork exceeds %d bytes", maxArtworkBytes)
+			}
+			buf = append(buf, chunk...)
+		}
+	}
+
+	if itemID == "" {
+		return status.Error(codes.InvalidArgument, "item_id required")
+	}
+	kind, err := normalizeArtworkKind(artworkType)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	m.mu.RLock()
+	var exists string
+	scanErr := m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE id = ?`, itemID).Scan(&exists)
+	m.mu.RUnlock()
+	if scanErr != nil || exists == "" {
+		return status.Errorf(codes.NotFound, "series not found: %s", itemID)
+	}
+
+	relPath, mime, err := m.writeArtworkBytes(itemID, kind, filename, "", buf)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	col := "poster_path"
+	artType := "poster"
+	if kind == "backdrop" {
+		col = "backdrop_path"
+		artType = "background"
+	}
+	m.mu.Lock()
+	_, err = m.db.ExecContext(ctx,
+		fmt.Sprintf(`UPDATE series SET %s=?, updated_at=? WHERE id=?`, col),
+		relPath, time.Now().UTC().Format(time.RFC3339), itemID,
+	)
+	m.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("update artwork path: %w", err)
+	}
+
+	return stream.SendAndClose(&mediaadminv1.ReplaceArtworkResponse{
+		Artwork: &mediaadminv1.ArtworkInfo{
+			Id: itemID + "_" + kind, ItemId: itemID,
+			Type: artType, Url: artworkURL(m.httpAddr, relPath),
+			MimeType: mime,
+		},
+	})
 }
 
-func seriesToMediaItem(s *tvmgmtv1.TVSeries) *mediaadminv1.MediaItem {
+func (m *Module) seriesToMediaItem(s *tvmgmtv1.TVSeries) *mediaadminv1.MediaItem {
 	meta := map[string]string{
-		"tmdb_id":       strconv.Itoa(int(s.GetTmdbId())),
-		"status":        s.GetStatus(),
-		"network":       s.GetNetwork(),
-		"vote_avg":      fmt.Sprintf("%.1f", s.GetVoteAverage()),
-		"season_count":  strconv.Itoa(int(s.GetTotalSeasons())),
-		"episode_count": strconv.Itoa(int(s.GetTotalEpisodes())),
-		"first_air":     s.GetFirstAirDate(),
-		"last_air":      s.GetLastAirDate(),
+		"tmdb_id":            strconv.Itoa(int(s.GetTmdbId())),
+		"status":             s.GetStatus(),
+		"network":            s.GetNetwork(),
+		"vote_avg":           fmt.Sprintf("%.1f", s.GetVoteAverage()),
+		"season_count":       strconv.Itoa(int(s.GetTotalSeasons())),
+		"episode_count":      strconv.Itoa(int(s.GetTotalEpisodes())),
+		"first_air":          s.GetFirstAirDate(),
+		"last_air":           s.GetLastAirDate(),
+		"monitored":          strconv.FormatBool(s.GetMonitored()),
+		"quality_profile_id": s.GetQualityProfileId(),
+		"root_folder_path":   s.GetRootFolderPath(),
 	}
 	if s.GetTagline() != "" {
 		meta["tagline"] = s.GetTagline()
@@ -1223,6 +2043,7 @@ func seriesToMediaItem(s *tvmgmtv1.TVSeries) *mediaadminv1.MediaItem {
 		Year:        int64(s.GetYear()),
 		Genres:      s.GetGenres(),
 		Metadata:    meta,
+		Artwork:     m.buildArtworkInfos(s.GetId(), s.GetPosterPath(), s.GetBackdropPath()),
 		CreatedAt:   s.GetCreatedAt(),
 		UpdatedAt:   s.GetUpdatedAt(),
 	}
