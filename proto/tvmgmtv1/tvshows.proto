@@ -7,11 +7,18 @@ service TvManagementService {
   rpc RemoveTVShow(RemoveTVShowRequest) returns (RemoveTVShowResponse);
   rpc RefreshMetadata(RefreshMetadataRequest) returns (RefreshMetadataResponse);
   rpc ListTVShows(ListTVShowsRequest) returns (ListTVShowsResponse);
+  rpc ListMissing(ListMissingRequest) returns (ListMissingResponse);
   rpc GetTVShow(GetTVShowRequest) returns (GetTVShowResponse);
+  rpc UpdateTVShow(UpdateTVShowRequest) returns (UpdateTVShowResponse);
   rpc UpdateEpisodeMonitored(UpdateEpisodeMonitoredRequest) returns (UpdateEpisodeMonitoredResponse);
   rpc UpdateSeasonMonitored(UpdateSeasonMonitoredRequest) returns (UpdateSeasonMonitoredResponse);
   rpc AddEpisodeFile(AddEpisodeFileRequest) returns (AddEpisodeFileResponse);
   rpc RemoveEpisodeFile(RemoveEpisodeFileRequest) returns (RemoveEpisodeFileResponse);
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
+  rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
+  rpc SetItemTags(SetItemTagsRequest) returns (SetItemTagsResponse);
+  rpc GetCalendar(GetCalendarRequest) returns (GetCalendarResponse);
 }
 
 message AddTVShowRequest {
@@ -22,6 +29,9 @@ message AddTVShowRequest {
   string poster_path = 5;
   string backdrop_path = 6;
   repeated string genres = 7;
+  string quality_profile_id = 8;
+  string root_folder_path = 9;
+  string series_type = 10; // "standard", "daily", or "anime"
 }
 
 message AddTVShowResponse {
@@ -30,6 +40,7 @@ message AddTVShowResponse {
 
 message RemoveTVShowRequest {
   string series_id = 1;
+  bool delete_files = 2;
 }
 
 message RemoveTVShowResponse {}
@@ -47,6 +58,7 @@ message ListTVShowsRequest {
   string genre = 4;
   string sort_by = 5;
   string sort_order = 6;
+  string tag_id = 7;
 }
 
 message ListTVShowsResponse {
@@ -54,6 +66,33 @@ message ListTVShowsResponse {
   int32 total = 2;
   int32 page = 3;
   int32 page_size = 4;
+}
+
+message ListMissingRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string series_id = 3;
+}
+
+message ListMissingResponse {
+  repeated MissingEpisodeItem items = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message MissingEpisodeItem {
+  string episode_id = 1;
+  string series_id = 2;
+  int32 tmdb_id = 3;
+  string title = 4;
+  int32 year = 5;
+  int32 season_number = 6;
+  int32 episode_number = 7;
+  string quality_profile_id = 8;
+  string air_date = 9;
+  int32 absolute_number = 10;
+  string series_type = 11; // "standard", "daily", or "anime"
 }
 
 message GetTVShowRequest {
@@ -77,6 +116,18 @@ message UpdateSeasonMonitoredRequest {
 }
 
 message UpdateSeasonMonitoredResponse {}
+
+message UpdateTVShowRequest {
+  string series_id = 1;
+  optional string quality_profile_id = 2;
+  optional string root_folder_path = 3;
+  optional bool monitored = 4;
+  optional string series_type = 5; // "standard", "daily", or "anime"
+}
+
+message UpdateTVShowResponse {
+  TVSeries series = 1;
+}
 
 message TVSeries {
   string id = 1;
@@ -102,6 +153,9 @@ message TVSeries {
   int32 total_seasons = 21;
   string created_at = 22;
   string updated_at = 23;
+  string quality_profile_id = 24;
+  string root_folder_path = 25;
+  string series_type = 26; // "standard", "daily", or "anime"
 }
 
 message TVSeason {
@@ -143,6 +197,7 @@ message AddEpisodeFileRequest {
   string quality = 3;
   int64 size_bytes = 4;
   string container = 5;
+  repeated string episode_ids = 6; // multi-ep: when set, links file to all (episode_id optional)
 }
 
 message AddEpisodeFileResponse {
@@ -151,6 +206,63 @@ message AddEpisodeFileResponse {
 
 message RemoveEpisodeFileRequest {
   string file_id = 1;
+  bool delete_files = 2;
 }
 
 message RemoveEpisodeFileResponse {}
+
+message CreateTagRequest {
+  string label = 1;
+}
+
+message CreateTagResponse {
+  string tag_id = 1;
+}
+
+message DeleteTagRequest {
+  string tag_id = 1;
+}
+
+message DeleteTagResponse {}
+
+message ListTagsRequest {}
+
+message ListTagsResponse {
+  repeated Tag tags = 1;
+}
+
+message Tag {
+  string id = 1;
+  string label = 2;
+  string created_at = 3;
+}
+
+message SetItemTagsRequest {
+  string item_id = 1;
+  repeated string tag_ids = 2;
+}
+
+message SetItemTagsResponse {}
+
+message GetCalendarRequest {
+  string start_date = 1; // YYYY-MM-DD
+  string end_date = 2;   // YYYY-MM-DD
+  bool include_unmonitored = 3;
+}
+
+message GetCalendarResponse {
+  repeated CalendarItem items = 1;
+}
+
+message CalendarItem {
+  string episode_id = 1;
+  string series_id = 2;
+  string series_name = 3;
+  int32 tmdb_id = 4;
+  int32 season_number = 5;
+  int32 episode_number = 6;
+  string episode_name = 7;
+  string air_date = 8;
+  bool monitored = 9;
+  bool has_file = 10;
+}

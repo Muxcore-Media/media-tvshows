@@ -10,15 +10,19 @@
 
 ## v0.2.0 (Planned)
 
-- [ ] Metadata refresh via metadata-tmdb gRPC
-- [ ] Episode file tracking (has_file updates)
-- [ ] Season pack detection
+- [x] Metadata refresh via metadata-tmdb gRPC
+- [x] Episode file tracking (has_file updates)
+- [x] Season pack detection
 - [ ] Search indexers and download episodes
-- [ ] Event publishing (download.required, media.imported)
+- [x] Event publishing (download.required, media.imported)
 
 ## Future
 
-- [ ] Absolute episode number support (anime)
-- [ ] Multi-episode file support
-- [ ] Air date-based monitoring
-- [ ] Series-level quality profiles
+- [x] Absolute episode number support (anime)
+- [x] Multi-episode file support
+- [x] Air date-based monitoring
+- [x] Series-level quality profiles
+- [x] Series types (standard/daily/anime)
+- [x] Library tags
+- [x] Calendar / upcoming episodes
+- [x] Delete from disk
