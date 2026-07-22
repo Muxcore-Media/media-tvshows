@@ -24,13 +24,13 @@ import (
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	"github.com/Muxcore-Media/core/sdk/go/client"
+	rootsv1 "github.com/Muxcore-Media/media-root-folders/proto/rootsv1"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 	metadatav1 "github.com/Muxcore-Media/metadata-tmdb/proto/metadatav1"
 	_ "modernc.org/sqlite"
 )
 
 type Module struct {
-	mediaadminv1.UnimplementedMediaAdminServiceServer
 	tvmgmtv1.UnimplementedTvManagementServiceServer
 
 	mu sync.RWMutex
@@ -46,6 +46,10 @@ type Module struct {
 	httpSrv  *http.Server
 	grpcLis  net.Listener
 	httpLis  net.Listener
+
+	rootsConn   *grpc.ClientConn
+	rootsClient rootsv1.RootFolderServiceClient
+	rootsListFn func(ctx context.Context, mediaKind string) ([]string, error)
 }
 
 type Config struct {
@@ -283,6 +287,17 @@ func (m *Module) Init(ctx context.Context) error {
 
 	m.mu.Lock()
 	m.db = db
+	if err := m.ensureHistoryTable(ctx); err != nil {
+		m.mu.Unlock()
+		db.Close()
+		return err
+	}
+	if err := m.ensureSeriesTitlesTable(ctx); err != nil {
+		m.mu.Unlock()
+		db.Close()
+		return err
+	}
+	m.backfillSeriesTitles(ctx)
 	m.mu.Unlock()
 
 	grpcLis, err := net.Listen("tcp", m.grpcAddr)
@@ -309,7 +324,7 @@ func (m *Module) Init(ctx context.Context) error {
 
 func (m *Module) Start(ctx context.Context) error {
 	m.grpcSrv = grpc.NewServer()
-	mediaadminv1.RegisterMediaAdminServiceServer(m.grpcSrv, m)
+	mediaadminv1.RegisterMediaAdminServiceServer(m.grpcSrv, mediaAdminServer{m: m})
 	tvmgmtv1.RegisterTvManagementServiceServer(m.grpcSrv, m)
 
 	mux := http.NewServeMux()
@@ -331,6 +346,7 @@ func (m *Module) Start(ctx context.Context) error {
 
 	go m.dialCore(context.Background())
 	go m.subscribeToFileImported()
+	go m.subscribeToDownloadDispatched()
 	return nil
 }
 
@@ -340,6 +356,9 @@ func (m *Module) Stop(ctx context.Context) error {
 	}
 	if m.grpcSrv != nil {
 		m.grpcSrv.GracefulStop()
+	}
+	if m.rootsConn != nil {
+		_ = m.rootsConn.Close()
 	}
 	if m.mc != nil {
 		m.mc.Close()
@@ -588,6 +607,7 @@ func (m *Module) resolveSeriesForImport(ctx context.Context, p contracts.FileImp
 	if err != nil {
 		return "", 0, err
 	}
+	go m.syncSeriesTitlesFromTMDB(context.Background(), resp.GetSeriesId(), tmdbID, name, "")
 	return resp.GetSeriesId(), tmdbID, nil
 }
 
@@ -605,22 +625,23 @@ func (m *Module) findSeries(tmdbID int32, title string, year int32) (string, int
 			return id, tid
 		}
 	}
-	norm := normalizeTitle(title)
-	if norm == "" {
+	clean := cleanMatchTitle(title)
+	if clean == "" {
 		return "", 0
 	}
-	rows, err := m.db.Query(`SELECT id, tmdb_id, name, year FROM series`)
+	rows, err := m.db.Query(`
+		SELECT s.id, s.tmdb_id, s.year FROM series s
+		INNER JOIN series_titles t ON t.series_id = s.id
+		WHERE t.clean_title = ?
+	`, clean)
 	if err != nil {
 		return "", 0
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var rowID, rowName string
+		var rowID string
 		var rowTMDB, rowYear int32
-		if err := rows.Scan(&rowID, &rowTMDB, &rowName, &rowYear); err != nil {
-			continue
-		}
-		if normalizeTitle(rowName) != norm {
+		if err := rows.Scan(&rowID, &rowTMDB, &rowYear); err != nil {
 			continue
 		}
 		if year == 0 || rowYear == 0 || rowYear == year {
@@ -720,15 +741,12 @@ func (m *Module) searchTVMetadata(ctx context.Context, title string, year int32)
 	resp, err := metaClient.Search(ctx, &metadatav1.SearchRequest{
 		Query: title,
 		Type:  metadatav1.MediaType_MEDIA_TYPE_TV,
+		Year:  year,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("metadata search: %w", err)
 	}
 	return pickBestSearchResult(resp.GetResults(), year, false), nil
-}
-
-func normalizeTitle(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
 }
 
 func pickBestSearchResult(results []*metadatav1.SearchResult, year int32, movie bool) *metadatav1.SearchResult {
@@ -782,6 +800,11 @@ func (m *Module) findMetadataModule(ctx context.Context) (string, error) {
 // ── TvManagementService ────────────────────────────────────────
 
 func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) (*tvmgmtv1.AddTVShowResponse, error) {
+	rootPath, err := m.resolveRootFolderPath(ctx, req.GetRootFolderPath(), "tv")
+	if err != nil {
+		return nil, err
+	}
+
 	m.mu.Lock()
 	if m.db == nil {
 		m.mu.Unlock()
@@ -813,7 +836,7 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
 		id, req.GetTmdbId(), req.GetName(), req.GetYear(),
 		req.GetOverview(), req.GetPosterPath(), req.GetBackdropPath(),
-		string(genresJSON), req.GetQualityProfileId(), req.GetRootFolderPath(), seriesType, now, now,
+		string(genresJSON), req.GetQualityProfileId(), rootPath, seriesType, now, now,
 	)
 	if err != nil {
 		m.mu.Unlock()
@@ -825,9 +848,11 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 		m.mu.Unlock()
 		return &tvmgmtv1.AddTVShowResponse{SeriesId: existingID}, nil
 	}
+	m.syncSeriesPrimaryTitlesLocked(ctx, id, req.GetName(), "")
 	m.mu.Unlock()
 
 	m.persistCachedArtwork(ctx, id, req.GetPosterPath(), req.GetBackdropPath())
+	go m.syncSeriesTitlesFromTMDB(context.Background(), id, req.GetTmdbId(), req.GetName(), "")
 
 	go m.publish(context.Background(), contracts.EventTVAdded, map[string]interface{}{
 		"series_id": id, "tmdb_id": req.GetTmdbId(), "name": req.GetName(),
@@ -839,6 +864,15 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 }
 
 func (m *Module) UpdateTVShow(ctx context.Context, req *tvmgmtv1.UpdateTVShowRequest) (*tvmgmtv1.UpdateTVShowResponse, error) {
+	var rootPath *string
+	if req.RootFolderPath != nil {
+		resolved, err := m.resolveRootFolderPath(ctx, req.GetRootFolderPath(), "tv")
+		if err != nil {
+			return nil, err
+		}
+		rootPath = &resolved
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.db == nil {
@@ -854,9 +888,9 @@ func (m *Module) UpdateTVShow(ctx context.Context, req *tvmgmtv1.UpdateTVShowReq
 		sets = append(sets, `quality_profile_id = ?`)
 		args = append(args, req.GetQualityProfileId())
 	}
-	if req.RootFolderPath != nil {
+	if rootPath != nil {
 		sets = append(sets, `root_folder_path = ?`)
-		args = append(args, req.GetRootFolderPath())
+		args = append(args, *rootPath)
 	}
 	if req.Monitored != nil {
 		monitored := 0
@@ -955,6 +989,15 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 		}
 	}
 
+	var seriesName string
+	_ = m.db.QueryRowContext(ctx, `SELECT name FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&seriesName)
+	m.appendHistory(ctx, historyEntry{
+		EventType: historyDeleteItem,
+		ItemID:    req.GetSeriesId(),
+		Title:     seriesName,
+		Data:      map[string]any{"delete_files": req.GetDeleteFiles()},
+	})
+
 	_, err = m.db.ExecContext(ctx,
 		`DELETE FROM episode_files WHERE episode_id IN (SELECT id FROM episodes WHERE series_id = ?)`,
 		req.GetSeriesId())
@@ -962,6 +1005,7 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 		return nil, fmt.Errorf("delete episode files: %w", err)
 	}
 	_, _ = m.db.ExecContext(ctx, `DELETE FROM item_tags WHERE item_id = ?`, req.GetSeriesId())
+	_, _ = m.db.ExecContext(ctx, `DELETE FROM series_titles WHERE series_id = ?`, req.GetSeriesId())
 	_, err = m.db.ExecContext(ctx, `DELETE FROM episodes WHERE series_id = ?`, req.GetSeriesId())
 	if err != nil {
 		return nil, fmt.Errorf("delete episodes: %w", err)
@@ -1037,12 +1081,16 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 		details.GetNumberOfSeasons(), details.GetNumberOfEpisodes(),
 		now, req.GetSeriesId(),
 	)
+	if err == nil {
+		m.syncSeriesPrimaryTitlesLocked(ctx, req.GetSeriesId(), details.GetName(), details.GetOriginalName())
+	}
 	m.mu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("update series: %w", err)
 	}
 
 	m.persistCachedArtwork(ctx, req.GetSeriesId(), posterSrc, backdropSrc)
+	go m.syncSeriesTitlesFromTMDB(context.Background(), req.GetSeriesId(), tmdbID, details.GetName(), details.GetOriginalName())
 
 	m.populateSeasonsFromDB(ctx, req.GetSeriesId(), details)
 	m.populateEpisodesFromMetadata(ctx, metaClient, req.GetSeriesId(), tmdbID, details)
@@ -1227,8 +1275,9 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	var where []string
 
 	if req.GetSearch() != "" {
-		where = append(where, `name LIKE ?`)
-		args = append(args, "%"+req.GetSearch()+"%")
+		where = append(where, `(name LIKE ? OR id IN (SELECT series_id FROM series_titles WHERE title LIKE ? OR clean_title LIKE ?))`)
+		q := "%" + req.GetSearch() + "%"
+		args = append(args, q, q, "%"+cleanMatchTitle(req.GetSearch())+"%")
 	}
 	if req.GetGenre() != "" {
 		where = append(where, `genres LIKE ?`)
@@ -1384,6 +1433,108 @@ func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) 
 	return &tvmgmtv1.GetTVShowResponse{Series: series}, nil
 }
 
+func (m *Module) LookupEpisode(ctx context.Context, req *tvmgmtv1.LookupEpisodeRequest) (*tvmgmtv1.LookupEpisodeResponse, error) {
+	if m.db == nil {
+		return nil, fmt.Errorf("not initialized")
+	}
+
+	seriesID, _ := m.findSeries(req.GetTmdbId(), req.GetTitle(), req.GetYear())
+	if seriesID == "" {
+		return &tvmgmtv1.LookupEpisodeResponse{Found: false}, nil
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var seriesName, originalName string
+	_ = m.db.QueryRowContext(ctx,
+		`SELECT name, original_name FROM series WHERE id = ?`, seriesID,
+	).Scan(&seriesName, &originalName)
+
+	epNums := req.GetEpisodeNumbers()
+	if len(epNums) == 0 && req.GetEpisodeNumber() > 0 {
+		epNums = []int32{req.GetEpisodeNumber()}
+	}
+
+	type epRow struct {
+		id, name, airDate string
+		season, episode   int32
+		absolute          int32
+	}
+	var episodes []epRow
+
+	resolveOne := func(season, episode int32) (epRow, bool) {
+		var r epRow
+		err := m.db.QueryRowContext(ctx,
+			`SELECT id, name, air_date, season_number, episode_number, absolute_number
+			 FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
+			seriesID, season, episode,
+		).Scan(&r.id, &r.name, &r.airDate, &r.season, &r.episode, &r.absolute)
+		if err != nil {
+			return epRow{}, false
+		}
+		return r, true
+	}
+
+	switch {
+	case len(epNums) > 0:
+		season := req.GetSeasonNumber()
+		for _, n := range epNums {
+			if r, ok := resolveOne(season, n); ok {
+				episodes = append(episodes, r)
+			}
+		}
+	case req.GetAbsoluteNumber() > 0:
+		var r epRow
+		err := m.db.QueryRowContext(ctx,
+			`SELECT id, name, air_date, season_number, episode_number, absolute_number
+			 FROM episodes WHERE series_id = ? AND absolute_number = ? LIMIT 1`,
+			seriesID, req.GetAbsoluteNumber(),
+		).Scan(&r.id, &r.name, &r.airDate, &r.season, &r.episode, &r.absolute)
+		if err == nil {
+			episodes = append(episodes, r)
+		}
+	case req.GetAirDate() != "":
+		var r epRow
+		err := m.db.QueryRowContext(ctx,
+			`SELECT id, name, air_date, season_number, episode_number, absolute_number
+			 FROM episodes WHERE series_id = ? AND air_date = ? LIMIT 1`,
+			seriesID, req.GetAirDate(),
+		).Scan(&r.id, &r.name, &r.airDate, &r.season, &r.episode, &r.absolute)
+		if err == nil {
+			episodes = append(episodes, r)
+		}
+	}
+
+	if len(episodes) == 0 {
+		return &tvmgmtv1.LookupEpisodeResponse{
+			SeriesId:     seriesID,
+			SeriesName:   seriesName,
+			OriginalName: originalName,
+			Found:        false,
+		}, nil
+	}
+
+	titles := make([]string, 0, len(episodes))
+	for _, e := range episodes {
+		if e.name != "" {
+			titles = append(titles, e.name)
+		}
+	}
+	first := episodes[0]
+	return &tvmgmtv1.LookupEpisodeResponse{
+		SeriesId:       seriesID,
+		SeriesName:     seriesName,
+		OriginalName:   originalName,
+		EpisodeTitle:   strings.Join(titles, " + "),
+		AirDate:        first.airDate,
+		SeasonNumber:   first.season,
+		EpisodeNumber:  first.episode,
+		AbsoluteNumber: first.absolute,
+		Found:          true,
+	}, nil
+}
+
 func (m *Module) UpdateEpisodeMonitored(ctx context.Context, req *tvmgmtv1.UpdateEpisodeMonitoredRequest) (*tvmgmtv1.UpdateEpisodeMonitoredResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1456,10 +1607,15 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	var firstFileID string
+	var seriesID, seriesName string
 	for _, episodeID := range episodeIDs {
 		id := fmt.Sprintf("ef_%d", time.Now().UnixNano())
 		if firstFileID == "" {
 			firstFileID = id
+			_ = m.db.QueryRowContext(ctx,
+				`SELECT e.series_id, s.name FROM episodes e INNER JOIN series s ON s.id = e.series_id WHERE e.id = ?`,
+				episodeID,
+			).Scan(&seriesID, &seriesName)
 		}
 		_, err := m.db.ExecContext(ctx,
 			`INSERT INTO episode_files (id, episode_id, file_path, quality, size_bytes, container, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -1473,7 +1629,23 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 		epID := episodeID
 		fileID := id
 		go m.publish(context.Background(), contracts.EventTVEpisodeFileAdded, map[string]interface{}{
-			"file_id": fileID, "episode_id": epID, "file_path": req.GetFilePath(),
+			"file_id": fileID, "episode_id": epID, "file_path": req.GetFilePath(), "quality": req.GetQuality(),
+		})
+	}
+
+	if seriesID != "" {
+		m.appendHistory(ctx, historyEntry{
+			EventType: historyImport,
+			ItemID:    seriesID,
+			Title:     seriesName,
+			Quality:   req.GetQuality(),
+			FilePath:  req.GetFilePath(),
+			Data: map[string]any{
+				"file_id":     firstFileID,
+				"episode_ids": episodeIDs,
+				"container":   req.GetContainer(),
+				"size_bytes":  req.GetSizeBytes(),
+			},
 		})
 	}
 
@@ -1522,6 +1694,29 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 		_ = safeDeleteMediaFile(filePath, rootFolder)
 	}
 
+	var seriesID, seriesName, quality string
+	if len(episodeIDs) > 0 {
+		_ = m.db.QueryRowContext(ctx,
+			`SELECT e.series_id, s.name FROM episodes e INNER JOIN series s ON s.id = e.series_id WHERE e.id = ? LIMIT 1`,
+			episodeIDs[0],
+		).Scan(&seriesID, &seriesName)
+	}
+	_ = m.db.QueryRowContext(ctx, `SELECT COALESCE(quality, '') FROM episode_files WHERE id = ?`, req.GetFileId()).Scan(&quality)
+	if seriesID != "" {
+		m.appendHistory(ctx, historyEntry{
+			EventType: historyDeleteFile,
+			ItemID:    seriesID,
+			Title:     seriesName,
+			Quality:   quality,
+			FilePath:  filePath,
+			Data: map[string]any{
+				"file_id":      req.GetFileId(),
+				"episode_ids":  episodeIDs,
+				"delete_files": req.GetDeleteFiles(),
+			},
+		})
+	}
+
 	_, err = m.db.ExecContext(ctx, `DELETE FROM episode_files WHERE file_path = ?`, filePath)
 	if err != nil {
 		return nil, fmt.Errorf("delete file: %w", err)
@@ -1534,6 +1729,9 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 		if count == 0 {
 			m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 0, updated_at = ? WHERE id = ?`, now, episodeID)
 		}
+		go m.publish(context.Background(), contracts.EventTVEpisodeFileRemoved, map[string]interface{}{
+			"file_id": req.GetFileId(), "episode_id": episodeID, "series_id": seriesID, "file_path": filePath,
+		})
 	}
 
 	return &tvmgmtv1.RemoveEpisodeFileResponse{}, nil
@@ -1746,6 +1944,7 @@ func (m *Module) GetMediaTypeInfo(ctx context.Context, req *mediaadminv1.GetMedi
 			{Key: "network", Label: "Network", Type: "text"},
 			{Key: "has_file", Label: "Has File", Type: "select", Options: []string{"true", "false"}},
 		},
+		Features: []string{"missing", "tags", "calendar"},
 	}, nil
 }
 
@@ -1776,8 +1975,13 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	var where []string
 
 	if req.GetSearch() != "" {
-		where = append(where, `name LIKE ?`)
-		args = append(args, "%"+req.GetSearch()+"%")
+		where = append(where, `(name LIKE ? OR id IN (SELECT series_id FROM series_titles WHERE title LIKE ? OR clean_title LIKE ?))`)
+		q := "%" + req.GetSearch() + "%"
+		args = append(args, q, q, "%"+cleanMatchTitle(req.GetSearch())+"%")
+	}
+	if req.GetTagId() != "" {
+		where = append(where, `id IN (SELECT item_id FROM item_tags WHERE tag_id = ?)`)
+		args = append(args, req.GetTagId())
 	}
 
 	sortBy := req.GetSortBy()
@@ -1864,6 +2068,20 @@ func (m *Module) UpdateMetadata(ctx context.Context, req *mediaadminv1.UpdateMet
 		return nil, fmt.Errorf("update series: %w", err)
 	}
 
+	meta := req.GetMetadata()
+	if meta != nil {
+		if v, ok := meta["quality_profile_id"]; ok {
+			if _, err := m.db.ExecContext(ctx, `UPDATE series SET quality_profile_id=?, updated_at=? WHERE id=?`, v, now, req.GetId()); err != nil {
+				return nil, fmt.Errorf("update quality_profile_id: %w", err)
+			}
+		}
+		if v, ok := meta["root_folder_path"]; ok {
+			if _, err := m.db.ExecContext(ctx, `UPDATE series SET root_folder_path=?, updated_at=? WHERE id=?`, v, now, req.GetId()); err != nil {
+				return nil, fmt.Errorf("update root_folder_path: %w", err)
+			}
+		}
+	}
+
 	row := m.db.QueryRowContext(ctx,
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
@@ -1940,7 +2158,7 @@ func (m *Module) RefreshItem(ctx context.Context, req *mediaadminv1.RefreshItemR
 	return &mediaadminv1.RefreshItemResponse{Item: item.Item}, nil
 }
 
-func (m *Module) ReplaceArtwork(stream grpc.ClientStreamingServer[mediaadminv1.ReplaceArtworkRequest, mediaadminv1.ReplaceArtworkResponse]) error {
+func (m *Module) ReplaceArtwork(stream mediaadminv1.MediaAdminService_ReplaceArtworkServer) error {
 	ctx := stream.Context()
 	var itemID, artworkType, filename string
 	var buf []byte

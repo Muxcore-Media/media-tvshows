@@ -35,6 +35,10 @@ const (
 	TvManagementService_ListTags_FullMethodName               = "/muxcore.media.tv.v1.TvManagementService/ListTags"
 	TvManagementService_SetItemTags_FullMethodName            = "/muxcore.media.tv.v1.TvManagementService/SetItemTags"
 	TvManagementService_GetCalendar_FullMethodName            = "/muxcore.media.tv.v1.TvManagementService/GetCalendar"
+	TvManagementService_ListAlternateTitles_FullMethodName    = "/muxcore.media.tv.v1.TvManagementService/ListAlternateTitles"
+	TvManagementService_AddAlternateTitle_FullMethodName      = "/muxcore.media.tv.v1.TvManagementService/AddAlternateTitle"
+	TvManagementService_RemoveAlternateTitle_FullMethodName   = "/muxcore.media.tv.v1.TvManagementService/RemoveAlternateTitle"
+	TvManagementService_LookupEpisode_FullMethodName          = "/muxcore.media.tv.v1.TvManagementService/LookupEpisode"
 )
 
 // TvManagementServiceClient is the client API for TvManagementService service.
@@ -57,6 +61,10 @@ type TvManagementServiceClient interface {
 	ListTags(ctx context.Context, in *ListTagsRequest, opts ...grpc.CallOption) (*ListTagsResponse, error)
 	SetItemTags(ctx context.Context, in *SetItemTagsRequest, opts ...grpc.CallOption) (*SetItemTagsResponse, error)
 	GetCalendar(ctx context.Context, in *GetCalendarRequest, opts ...grpc.CallOption) (*GetCalendarResponse, error)
+	ListAlternateTitles(ctx context.Context, in *ListAlternateTitlesRequest, opts ...grpc.CallOption) (*ListAlternateTitlesResponse, error)
+	AddAlternateTitle(ctx context.Context, in *AddAlternateTitleRequest, opts ...grpc.CallOption) (*AddAlternateTitleResponse, error)
+	RemoveAlternateTitle(ctx context.Context, in *RemoveAlternateTitleRequest, opts ...grpc.CallOption) (*RemoveAlternateTitleResponse, error)
+	LookupEpisode(ctx context.Context, in *LookupEpisodeRequest, opts ...grpc.CallOption) (*LookupEpisodeResponse, error)
 }
 
 type tvManagementServiceClient struct {
@@ -211,6 +219,42 @@ func (c *tvManagementServiceClient) GetCalendar(ctx context.Context, in *GetCale
 	return out, nil
 }
 
+func (c *tvManagementServiceClient) ListAlternateTitles(ctx context.Context, in *ListAlternateTitlesRequest, opts ...grpc.CallOption) (*ListAlternateTitlesResponse, error) {
+	out := new(ListAlternateTitlesResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_ListAlternateTitles_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tvManagementServiceClient) AddAlternateTitle(ctx context.Context, in *AddAlternateTitleRequest, opts ...grpc.CallOption) (*AddAlternateTitleResponse, error) {
+	out := new(AddAlternateTitleResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_AddAlternateTitle_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tvManagementServiceClient) RemoveAlternateTitle(ctx context.Context, in *RemoveAlternateTitleRequest, opts ...grpc.CallOption) (*RemoveAlternateTitleResponse, error) {
+	out := new(RemoveAlternateTitleResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_RemoveAlternateTitle_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tvManagementServiceClient) LookupEpisode(ctx context.Context, in *LookupEpisodeRequest, opts ...grpc.CallOption) (*LookupEpisodeResponse, error) {
+	out := new(LookupEpisodeResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_LookupEpisode_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TvManagementServiceServer is the server API for TvManagementService service.
 // All implementations must embed UnimplementedTvManagementServiceServer
 // for forward compatibility
@@ -231,6 +275,10 @@ type TvManagementServiceServer interface {
 	ListTags(context.Context, *ListTagsRequest) (*ListTagsResponse, error)
 	SetItemTags(context.Context, *SetItemTagsRequest) (*SetItemTagsResponse, error)
 	GetCalendar(context.Context, *GetCalendarRequest) (*GetCalendarResponse, error)
+	ListAlternateTitles(context.Context, *ListAlternateTitlesRequest) (*ListAlternateTitlesResponse, error)
+	AddAlternateTitle(context.Context, *AddAlternateTitleRequest) (*AddAlternateTitleResponse, error)
+	RemoveAlternateTitle(context.Context, *RemoveAlternateTitleRequest) (*RemoveAlternateTitleResponse, error)
+	LookupEpisode(context.Context, *LookupEpisodeRequest) (*LookupEpisodeResponse, error)
 	mustEmbedUnimplementedTvManagementServiceServer()
 }
 
@@ -285,6 +333,18 @@ func (UnimplementedTvManagementServiceServer) SetItemTags(context.Context, *SetI
 }
 func (UnimplementedTvManagementServiceServer) GetCalendar(context.Context, *GetCalendarRequest) (*GetCalendarResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCalendar not implemented")
+}
+func (UnimplementedTvManagementServiceServer) ListAlternateTitles(context.Context, *ListAlternateTitlesRequest) (*ListAlternateTitlesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAlternateTitles not implemented")
+}
+func (UnimplementedTvManagementServiceServer) AddAlternateTitle(context.Context, *AddAlternateTitleRequest) (*AddAlternateTitleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddAlternateTitle not implemented")
+}
+func (UnimplementedTvManagementServiceServer) RemoveAlternateTitle(context.Context, *RemoveAlternateTitleRequest) (*RemoveAlternateTitleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveAlternateTitle not implemented")
+}
+func (UnimplementedTvManagementServiceServer) LookupEpisode(context.Context, *LookupEpisodeRequest) (*LookupEpisodeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupEpisode not implemented")
 }
 func (UnimplementedTvManagementServiceServer) mustEmbedUnimplementedTvManagementServiceServer() {}
 
@@ -587,6 +647,78 @@ func _TvManagementService_GetCalendar_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TvManagementService_ListAlternateTitles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAlternateTitlesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).ListAlternateTitles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_ListAlternateTitles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).ListAlternateTitles(ctx, req.(*ListAlternateTitlesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TvManagementService_AddAlternateTitle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddAlternateTitleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).AddAlternateTitle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_AddAlternateTitle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).AddAlternateTitle(ctx, req.(*AddAlternateTitleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TvManagementService_RemoveAlternateTitle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveAlternateTitleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).RemoveAlternateTitle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_RemoveAlternateTitle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).RemoveAlternateTitle(ctx, req.(*RemoveAlternateTitleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TvManagementService_LookupEpisode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LookupEpisodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).LookupEpisode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_LookupEpisode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).LookupEpisode(ctx, req.(*LookupEpisodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TvManagementService_ServiceDesc is the grpc.ServiceDesc for TvManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -657,6 +789,22 @@ var TvManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCalendar",
 			Handler:    _TvManagementService_GetCalendar_Handler,
+		},
+		{
+			MethodName: "ListAlternateTitles",
+			Handler:    _TvManagementService_ListAlternateTitles_Handler,
+		},
+		{
+			MethodName: "AddAlternateTitle",
+			Handler:    _TvManagementService_AddAlternateTitle_Handler,
+		},
+		{
+			MethodName: "RemoveAlternateTitle",
+			Handler:    _TvManagementService_RemoveAlternateTitle_Handler,
+		},
+		{
+			MethodName: "LookupEpisode",
+			Handler:    _TvManagementService_LookupEpisode_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
