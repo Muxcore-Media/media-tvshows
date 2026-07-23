@@ -13,20 +13,29 @@ A MuxCore sidecar module that manages TV show libraries with hierarchical series
 ## How It Works
 
 ```
-Admin UI ──→ media-tvshows ──→ SQLite (series, seasons, episodes)
-               │
-               ▼
-         Serves artwork via HTTP /images/
+Admin UI / clients ──→ media-tvshows ──→ SQLite (series, seasons, episodes, tags, history)
+                         │
+                         ├──→ metadata-tmdb (search / refresh)
+                         ├──→ media-root-folders (root path validation)
+                         ├──← file.imported / download.dispatched events
+                         └──→ HTTP /images/ (artwork)
 ```
 
 ### Key Features
 
 - **Series/Season/Episode hierarchy** — full tree structure with foreign key cascades
-- **TMDB metadata** — stores TMDB IDs for future metadata refresh integration
+- **TMDB metadata** — import and refresh via the `metadata` capability (`metadata-tmdb`)
+- **Episode file tracking** — add/remove episode files; optional on-disk delete; multi-episode file links
+- **Series types** — `standard`, `daily`, or `anime` (affects lookup / absolute numbering)
 - **Per-episode and per-season monitoring** — toggle monitoring at any level; season toggle cascades to episodes
-- **Admin UI integration** — implements `MediaAdminService` for browsing, searching, editing, and artwork management
+- **Tags & calendar** — tag series; air-date calendar; list monitored missing episodes
+- **Alternate titles** — store and look up series by alternate / clean titles
+- **History** — import, grab, and delete events via `MediaAdminService.ListHistory`
+- **Root folder paths** — validates against `media-root-folders` when available
+- **Event consumers** — subscribes to `file.imported` and `download.dispatched`
+- **Admin UI integration** — implements `MediaAdminService` (browse, search, edit, artwork, tags, calendar, missing, history)
 - **Flat MediaAdminService model** — each series appears as a `MediaItem` with metadata fields (season count, episode count, status, network, vote average)
-- **TV-specific management API** — `TvManagementService` for add, remove, list, get, refresh, and monitoring operations
+- **TV-specific management API** — `TvManagementService` for library CRUD, monitoring, files, tags, calendar, titles, and lookup
 
 ---
 
@@ -48,7 +57,8 @@ Admin UI ──→ media-tvshows ──→ SQLite (series, seasons, episodes)
 | `TVSHOWS_HTTP_ADDR` | `:9450` | HTTP listen address for artwork |
 | `TVSHOWS_IMAGE_DIR` | `/var/lib/media-tvshows/images` | Artwork images directory |
 | `MUXCORE_GRPC_ADDR` | `localhost:9090` | Core mesh gRPC address |
-| `MUXCORE_GRPC_INSECURE` | `false` | Disable TLS for dev |
+| `MUXCORE_INSECURE_DISABLE_TLS` | `false` | Disable TLS for dev |
+| `MUXCORE_MODULE_ID` | `media-tvshows` | Module identity (overrides flag default) |
 
 ---
 
@@ -59,7 +69,7 @@ Admin UI ──→ media-tvshows ──→ SQLite (series, seasons, episodes)
 make build
 
 # Run against local core (dev mode)
-export MUXCORE_GRPC_INSECURE=true
+export MUXCORE_INSECURE_DISABLE_TLS=true
 ./media-tvshows --muxcore-mesh-addr localhost:9090
 ```
 
@@ -73,7 +83,7 @@ export MUXCORE_GRPC_INSECURE=true
 make docker
 docker run -d --restart=unless-stopped \
   -e MUXCORE_GRPC_ADDR=core:9090 \
-  -e MUXCORE_GRPC_INSECURE=true \
+  -e MUXCORE_INSECURE_DISABLE_TLS=true \
   ghcr.io/muxcore-media/media-tvshows:latest
 ```
 
@@ -113,11 +123,12 @@ MUXCORE_GRPC_ADDR=localhost:9090 go test -tags=integration -race -count=1 ./test
 
 ## Implementation
 
-- Registers with capabilities: `"media.library"`
-- Implements `contracts-media-admin` `MediaAdminService`
-- Exposes TV-specific `TvManagementService` gRPC API
+- Registers with capabilities: `"media.library"`, `"media.library.tv"`
+- Implements `contracts-media-admin` `MediaAdminService` (including tags, calendar, missing, history; collections unimplemented)
+- Exposes `TvManagementService` gRPC API (`proto/tvmgmtv1`)
 - Uses SQLite for persistence (WAL mode, single connection)
 - Serves artwork images via HTTP file server
+- Discovers `metadata` and `media-root-folders` peers over the core mesh
 
 ---
 
