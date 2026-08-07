@@ -10,11 +10,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: core
+          repository: Muxcore-Media/core
+      - uses: actions/checkout@v7
+        with:
+          path: contracts-media-admin
+          repository: Muxcore-Media/contracts-media-admin
+      - uses: actions/checkout@v7
+        with:
+          path: media-root-folders
+          repository: Muxcore-Media/media-root-folders
+      - uses: actions/checkout@v7
+        with:
+          path: metadata-tmdb
+          repository: Muxcore-Media/metadata-tmdb
+      - uses: actions/checkout@v7
+        with:
+          path: media-tvshows
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
-      - run: go build -o media-tvshows ./cmd/module
+      - working-directory: ./media-tvshows
+        run: go build -o media-tvshows ./cmd/module
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          files: media-tvshows
+          files: media-tvshows/media-tvshows
