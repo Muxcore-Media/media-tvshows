@@ -107,11 +107,11 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Media TV Shows",
-		Version:      "0.1.8",
+		Version:      "0.1.9",
 		Roles:        []string{"media_manager"},
 		Description:  "TV show library manager with TMDB metadata import and admin UI integration",
 		Author:       "MuxCore",
-		Capabilities: []string{"media.library", "media.library.tv"},
+		Capabilities: []string{"media.library", "media.library.tv", "settings"},
 		Contracts: []contracts.ContractDeclaration{
 			{
 				Repo:      "github.com/Muxcore-Media/contracts-media-admin",
