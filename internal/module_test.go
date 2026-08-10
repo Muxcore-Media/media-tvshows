@@ -595,11 +595,17 @@ func TestHandleFileImportedTVStubEpisode(t *testing.T) {
 		t.Fatal("expected stub episode to exist")
 	}
 	var hasFile int
+	var path string
 	m.mu.RLock()
 	m.db.QueryRow(`SELECT has_file FROM episodes WHERE id = ?`, epID).Scan(&hasFile)
+	m.db.QueryRow(`SELECT file_path FROM episode_files WHERE episode_id = ?`, epID).Scan(&path)
 	m.mu.RUnlock()
 	if hasFile != 1 {
 		t.Errorf("expected has_file=1, got %d", hasFile)
+	}
+	want := "/data/media/TV/Game of Thrones/Season 01/ep.mkv"
+	if path != want {
+		t.Errorf("unexpected path %s (want absolute destination)", path)
 	}
 }
 
