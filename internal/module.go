@@ -24,6 +24,7 @@ import (
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	"github.com/Muxcore-Media/core/sdk/go/client"
+	automationv1 "github.com/Muxcore-Media/media-automation/proto/automationv1"
 	rootsv1 "github.com/Muxcore-Media/media-root-folders/proto/rootsv1"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 	metadatav1 "github.com/Muxcore-Media/metadata-tmdb/proto/metadatav1"
@@ -50,6 +51,8 @@ type Module struct {
 	rootsConn   *grpc.ClientConn
 	rootsClient rootsv1.RootFolderServiceClient
 	rootsListFn func(ctx context.Context, mediaKind string) ([]string, error)
+	// automationSearchFn overrides mesh automation SearchItem for tests.
+	automationSearchFn func(ctx context.Context, req *automationv1.SearchItemRequest) (*automationv1.SearchItemResponse, error)
 }
 
 type Config struct {
