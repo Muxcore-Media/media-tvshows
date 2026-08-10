@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.7] — 2026-08-10
+
+### Fixed
+- Prefer absolute `destination_path` on file import; resolve relative storage keys under series root for `/stream/tv`.
+
+
 ## [0.1.6] — 2026-08-10
 
 ### Fixed
