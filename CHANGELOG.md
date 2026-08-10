@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [0.1.6] — 2026-08-10
+
+### Fixed
+- PathUnescape episode stream ids for proxied playback URLs.
+
+
 ## [0.1.5] — 2026-08-10
 
 ### Fixed

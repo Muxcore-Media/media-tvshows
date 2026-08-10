@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -104,7 +105,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Media TV Shows",
-		Version:      "0.1.5",
+		Version:      "0.1.6",
 		Roles:        []string{"media_manager"},
 		Description:  "TV show library manager with TMDB metadata import and admin UI integration",
 		Author:       "MuxCore",
@@ -2302,6 +2303,9 @@ func (m *Module) handleStreamEpisode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/stream/tv/"), "/")
+	if decoded, err := url.PathUnescape(id); err == nil {
+		id = decoded
+	}
 	if id == "" || strings.Contains(id, "/") {
 		http.NotFound(w, r)
 		return
