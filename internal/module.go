@@ -105,7 +105,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Media TV Shows",
-		Version:      "0.1.6",
+		Version:      "0.1.7",
 		Roles:        []string{"media_manager"},
 		Description:  "TV show library manager with TMDB metadata import and admin UI integration",
 		Author:       "MuxCore",
@@ -462,9 +462,14 @@ func (m *Module) handleFileImported(ctx context.Context, p contracts.FileImporte
 	if qualityStr == "" {
 		qualityStr = "Unknown"
 	}
-	filePath := p.StorageKey
-	if filePath == "" {
-		filePath = p.DestinationPath
+	filePath := p.DestinationPath
+	if !filepath.IsAbs(filePath) {
+		// Prefer absolute library paths for local streaming; storage keys are relative.
+		if filepath.IsAbs(p.StorageKey) {
+			filePath = p.StorageKey
+		} else if filePath == "" {
+			filePath = p.StorageKey
+		}
 	}
 	_, err = m.AddEpisodeFile(ctx, &tvmgmtv1.AddEpisodeFileRequest{
 		EpisodeId:  episodeIDs[0],
@@ -2326,6 +2331,20 @@ func (m *Module) handleStreamEpisode(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.NotFound(w, r)
 		return
+	}
+	if filePath != "" && !filepath.IsAbs(filePath) {
+		var root string
+		_ = db.QueryRowContext(r.Context(),
+			`SELECT COALESCE(s.root_folder_path, '') FROM episodes e
+			 INNER JOIN series s ON s.id = e.series_id WHERE e.id = ?`, id,
+		).Scan(&root)
+		if root != "" {
+			rel := strings.TrimPrefix(filepath.ToSlash(filePath), "media/")
+			candidate := filepath.Join(root, filepath.FromSlash(rel))
+			if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+				filePath = candidate
+			}
+		}
 	}
 	if filePath == "" || !filepath.IsAbs(filePath) {
 		http.NotFound(w, r)
