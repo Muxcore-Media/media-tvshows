@@ -16,6 +16,21 @@ func TestCleanMatchTitle(t *testing.T) {
 	}
 }
 
+func TestSplitTitleYear(t *testing.T) {
+	title, year := splitTitleYear("When Calls the Heart (2014)", 0)
+	if title != "When Calls the Heart" || year != 2014 {
+		t.Fatalf("got title=%q year=%d", title, year)
+	}
+	title, year = splitTitleYear("Breaking Bad (2008)", 0)
+	if title != "Breaking Bad" || year != 2008 {
+		t.Fatalf("got title=%q year=%d", title, year)
+	}
+	title, year = splitTitleYear("Game of Thrones", 2011)
+	if title != "Game of Thrones" || year != 2011 {
+		t.Fatalf("kept year: title=%q year=%d", title, year)
+	}
+}
+
 func TestFindSeriesByAlternateTitles(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()

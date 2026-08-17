@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -23,7 +24,27 @@ const (
 	titleSourceUser     = "user"
 )
 
-var reSpaces = regexp.MustCompile(`\s+`)
+var (
+	reSpaces       = regexp.MustCompile(`\s+`)
+	reTrailingYear = regexp.MustCompile(`(?i)\s*[\(\[]((?:19|20)\d{2})[\)\]]\s*$`)
+)
+
+func splitTitleYear(title string, year int32) (string, int32) {
+	title = strings.TrimSpace(title)
+	m := reTrailingYear.FindStringSubmatch(title)
+	if len(m) < 2 {
+		return title, year
+	}
+	y, err := strconv.Atoi(m[1])
+	if err != nil || y < 1900 {
+		return title, year
+	}
+	title = strings.TrimSpace(reTrailingYear.ReplaceAllString(title, ""))
+	if year == 0 {
+		year = int32(y)
+	}
+	return title, year
+}
 
 func cleanMatchTitle(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))

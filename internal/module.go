@@ -573,19 +573,19 @@ func (m *Module) getSeriesType(seriesID string) string {
 }
 
 func (m *Module) resolveSeriesForImport(ctx context.Context, p contracts.FileImportedPayload) (seriesID string, tmdbID int32, err error) {
-	if id, tid := m.findSeries(p.TMDBID, p.Title, p.Year); id != "" {
+	title, year := splitTitleYear(p.Title, p.Year)
+	if id, tid := m.findSeries(p.TMDBID, title, year); id != "" {
 		return id, tid, nil
 	}
 	tmdbID = p.TMDBID
-	name := p.Title
-	year := p.Year
+	name := title
 	overview := ""
 	poster := ""
 	backdrop := ""
 	var genres []string
 
 	if tmdbID == 0 {
-		result, searchErr := m.searchTVMetadata(ctx, p.Title, p.Year)
+		result, searchErr := m.searchTVMetadata(ctx, title, year)
 		if searchErr != nil {
 			return "", 0, searchErr
 		}
@@ -792,6 +792,9 @@ func pickBestSearchResult(results []*metadatav1.SearchResult, year int32, movie 
 	}
 	if best != nil {
 		return best
+	}
+	if year != 0 {
+		return nil
 	}
 	return results[0]
 }

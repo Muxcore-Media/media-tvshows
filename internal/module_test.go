@@ -1282,3 +1282,19 @@ func TestLookupEpisode(t *testing.T) {
 		t.Fatal("expected not found")
 	}
 }
+
+func TestPickBestSearchResultRequiresYear(t *testing.T) {
+	results := []*metadatav1.SearchResult{
+		{Id: 1585, Name: "Dragon Tales", FirstAirDate: "1999-09-06", Popularity: 99, MediaType: metadatav1.MediaType_MEDIA_TYPE_TV},
+		{Id: 61865, Name: "When Calls the Heart", FirstAirDate: "2014-01-11", Popularity: 10, MediaType: metadatav1.MediaType_MEDIA_TYPE_TV},
+	}
+	got := pickBestSearchResult(results, 2014, false)
+	if got == nil || got.GetId() != 61865 {
+		t.Fatalf("want 2014 match, got %+v", got)
+	}
+	got = pickBestSearchResult(results[:1], 2014, false)
+	if got != nil {
+		t.Fatalf("year miss should not fall back, got %+v", got)
+	}
+}
+
