@@ -1,5 +1,5 @@
 # Roadmap
 
-## Remaining
+## Done
 
-- [ ] Indexer search + episode download (out of scope here — owned by media-automation; this module consumes download.dispatched / file.imported)
+- [x] Indexer search + episode download (owned by media-automation; this module consumes download.dispatched / file.imported)
