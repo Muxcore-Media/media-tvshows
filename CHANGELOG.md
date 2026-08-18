@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.10] — 2026-08-18
+
+### Fixed
+- `ListMissing` excludes season-0 specials so automation does not treat TMDB S00 episodes as wanted.
+
 ## [0.1.9] — 2026-08-10
 
 ### Added

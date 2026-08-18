@@ -107,7 +107,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Media TV Shows",
-		Version:      "0.1.9",
+		Version:      "0.1.10",
 		Roles:        []string{"media_manager"},
 		Description:  "TV show library manager with TMDB metadata import and admin UI integration",
 		Author:       "MuxCore",
@@ -1394,7 +1394,7 @@ func (m *Module) ListMissing(ctx context.Context, req *tvmgmtv1.ListMissingReque
 	}
 	offset := (page - 1) * pageSize
 
-	where := `WHERE e.monitored = 1 AND e.has_file = 0 AND (e.air_date = '' OR e.air_date <= date('now'))`
+	where := `WHERE e.monitored = 1 AND e.has_file = 0 AND e.season_number > 0 AND (e.air_date = '' OR e.air_date <= date('now'))`
 	var args []any
 	if req.GetSeriesId() != "" {
 		where += ` AND e.series_id = ?`
