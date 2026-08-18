@@ -876,6 +876,36 @@ func TestListMissingEpisodes(t *testing.T) {
 	}
 }
 
+func TestListMissingExcludesSeasonZeroSpecials(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+
+	m.mu.Lock()
+	m.db.ExecContext(ctx,
+		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
+		 VALUES ('s1', 253, 'Star Trek', 1966, 1, 'now', 'now')`)
+	m.db.ExecContext(ctx,
+		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
+		 VALUES ('se0', 's1', 0, 1, 'now', 'now'), ('se1', 's1', 1, 1, 'now', 'now')`)
+	m.db.ExecContext(ctx,
+		`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
+		 VALUES
+		 ('ep_s00e03', 's1', 'se0', 1, 3, 0, 1, 0, 'now', 'now'),
+		 ('ep_s01e01', 's1', 'se1', 2, 1, 1, 1, 0, 'now', 'now')`)
+	m.mu.Unlock()
+
+	resp, err := m.ListMissing(ctx, &tvmgmtv1.ListMissingRequest{Page: 1, PageSize: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Total != 1 {
+		t.Fatalf("expected 1 missing (S01 only), got %d", resp.Total)
+	}
+	if resp.Items[0].EpisodeId != "ep_s01e01" || resp.Items[0].SeasonNumber != 1 {
+		t.Fatalf("got %+v", resp.Items[0])
+	}
+}
+
 func TestListMissingExcludesUnaired(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()
