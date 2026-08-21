@@ -107,11 +107,11 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Media TV Shows",
-		Version:      "0.1.10",
+		Version:      "0.1.13",
 		Roles:        []string{"media_manager"},
 		Description:  "TV show library manager with TMDB metadata import and admin UI integration",
 		Author:       "MuxCore",
-		Capabilities: []string{"media.library", "media.library.tv", "settings"},
+		Capabilities: []string{"media.library", "media.library.tv", "settings", "backupable"},
 		Contracts: []contracts.ContractDeclaration{
 			{
 				Repo:      "github.com/Muxcore-Media/contracts-media-admin",
@@ -856,6 +856,7 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 	if req.GetTmdbId() != 0 {
 		_ = m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE tmdb_id = ? LIMIT 1`, req.GetTmdbId()).Scan(&existingID)
 		if existingID != "" {
+			m.backfillSeriesArtworkIfEmptyLocked(ctx, existingID, req.GetPosterPath(), req.GetBackdropPath())
 			m.mu.Unlock()
 			return &tvmgmtv1.AddTVShowResponse{SeriesId: existingID}, nil
 		}
@@ -902,6 +903,32 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 	go m.populateSeasonsFromMetadata(context.Background(), id, req.GetTmdbId())
 
 	return &tvmgmtv1.AddTVShowResponse{SeriesId: id}, nil
+}
+
+func (m *Module) backfillSeriesArtworkIfEmptyLocked(ctx context.Context, seriesID, posterPath, backdropPath string) {
+	if m.db == nil || seriesID == "" {
+		return
+	}
+	posterPath = strings.TrimSpace(posterPath)
+	backdropPath = strings.TrimSpace(backdropPath)
+	if posterPath == "" && backdropPath == "" {
+		return
+	}
+	var currentPoster, currentBackdrop string
+	_ = m.db.QueryRowContext(ctx, `SELECT poster_path, backdrop_path FROM series WHERE id = ?`, seriesID).
+		Scan(&currentPoster, &currentBackdrop)
+	now := time.Now().UTC().Format(time.RFC3339)
+	if posterPath != "" && strings.TrimSpace(currentPoster) == "" {
+		_, _ = m.db.ExecContext(ctx, `UPDATE series SET poster_path = ?, updated_at = ? WHERE id = ?`, posterPath, now, seriesID)
+		currentPoster = posterPath
+	}
+	if backdropPath != "" && strings.TrimSpace(currentBackdrop) == "" {
+		_, _ = m.db.ExecContext(ctx, `UPDATE series SET backdrop_path = ?, updated_at = ? WHERE id = ?`, backdropPath, now, seriesID)
+		currentBackdrop = backdropPath
+	}
+	if currentPoster != "" || currentBackdrop != "" {
+		go m.persistCachedArtwork(context.Background(), seriesID, currentPoster, currentBackdrop)
+	}
 }
 
 func (m *Module) UpdateTVShow(ctx context.Context, req *tvmgmtv1.UpdateTVShowRequest) (*tvmgmtv1.UpdateTVShowResponse, error) {
@@ -1700,10 +1727,21 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 		return nil, fmt.Errorf("not initialized")
 	}
 
+	fileID := strings.TrimSpace(req.GetFileId())
+	if fileID == "" && req.GetEpisodeId() != "" {
+		_ = m.db.QueryRowContext(ctx,
+			`SELECT id FROM episode_files WHERE episode_id = ? ORDER BY created_at LIMIT 1`,
+			req.GetEpisodeId(),
+		).Scan(&fileID)
+	}
+	if fileID == "" {
+		return nil, fmt.Errorf("file_id or episode_id required")
+	}
+
 	var filePath string
-	_ = m.db.QueryRowContext(ctx, `SELECT file_path FROM episode_files WHERE id = ?`, req.GetFileId()).Scan(&filePath)
+	_ = m.db.QueryRowContext(ctx, `SELECT file_path FROM episode_files WHERE id = ?`, fileID).Scan(&filePath)
 	if filePath == "" {
-		_, err := m.db.ExecContext(ctx, `DELETE FROM episode_files WHERE id = ?`, req.GetFileId())
+		_, err := m.db.ExecContext(ctx, `DELETE FROM episode_files WHERE id = ?`, fileID)
 		if err != nil {
 			return nil, fmt.Errorf("delete file: %w", err)
 		}
@@ -1742,7 +1780,7 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 			episodeIDs[0],
 		).Scan(&seriesID, &seriesName)
 	}
-	_ = m.db.QueryRowContext(ctx, `SELECT COALESCE(quality, '') FROM episode_files WHERE id = ?`, req.GetFileId()).Scan(&quality)
+	_ = m.db.QueryRowContext(ctx, `SELECT COALESCE(quality, '') FROM episode_files WHERE id = ?`, fileID).Scan(&quality)
 	if seriesID != "" {
 		m.appendHistory(ctx, historyEntry{
 			EventType: historyDeleteFile,
@@ -1751,7 +1789,7 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 			Quality:   quality,
 			FilePath:  filePath,
 			Data: map[string]any{
-				"file_id":      req.GetFileId(),
+				"file_id":      fileID,
 				"episode_ids":  episodeIDs,
 				"delete_files": req.GetDeleteFiles(),
 			},
@@ -2121,6 +2159,26 @@ func (m *Module) UpdateMetadata(ctx context.Context, req *mediaadminv1.UpdateMet
 				return nil, fmt.Errorf("update root_folder_path: %w", err)
 			}
 		}
+		if v, ok := meta["series_type"]; ok {
+			st, err := normalizeSeriesType(v)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := m.db.ExecContext(ctx, `UPDATE series SET series_type=?, updated_at=? WHERE id=?`, st, now, req.GetId()); err != nil {
+				return nil, fmt.Errorf("update series_type: %w", err)
+			}
+		}
+		if v, ok := meta["monitored"]; ok {
+			monitored := 0
+			if strings.EqualFold(strings.TrimSpace(v), "true") || v == "1" || strings.EqualFold(v, "yes") {
+				monitored = 1
+			}
+			if _, err := m.db.ExecContext(ctx, `UPDATE series SET monitored=?, updated_at=? WHERE id=?`, monitored, now, req.GetId()); err != nil {
+				return nil, fmt.Errorf("update monitored: %w", err)
+			}
+			_, _ = m.db.ExecContext(ctx, `UPDATE seasons SET monitored = ?, updated_at = ? WHERE series_id = ?`, monitored, now, req.GetId())
+			_, _ = m.db.ExecContext(ctx, `UPDATE episodes SET monitored = ?, updated_at = ? WHERE series_id = ?`, monitored, now, req.GetId())
+		}
 	}
 
 	row := m.db.QueryRowContext(ctx,
@@ -2144,13 +2202,25 @@ func (m *Module) ListArtwork(ctx context.Context, req *mediaadminv1.ListArtworkR
 		return nil, fmt.Errorf("not initialized")
 	}
 
+	var still string
+	err := m.db.QueryRowContext(ctx,
+		`SELECT still_path FROM episodes WHERE id = ?`, req.GetId(),
+	).Scan(&still)
+	if err == nil {
+		m.mu.RUnlock()
+		still = m.resolveEpisodeStillPath(ctx, req.GetId(), still)
+		return &mediaadminv1.ListArtworkResponse{
+			Artwork: m.buildEpisodeStillInfo(req.GetId(), still),
+		}, nil
+	}
+
 	row := m.db.QueryRowContext(ctx,
 		`SELECT poster_path, backdrop_path FROM series WHERE id = ?`, req.GetId(),
 	)
 	var poster, backdrop string
 	if err := row.Scan(&poster, &backdrop); err != nil {
 		m.mu.RUnlock()
-		return nil, fmt.Errorf("series not found: %s", req.GetId())
+		return nil, fmt.Errorf("item not found: %s", req.GetId())
 	}
 	m.mu.RUnlock()
 
@@ -2240,16 +2310,38 @@ func (m *Module) ReplaceArtwork(stream mediaadminv1.MediaAdminService_ReplaceArt
 	}
 
 	m.mu.RLock()
-	var exists string
-	scanErr := m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE id = ?`, itemID).Scan(&exists)
+	var seriesID, episodeID string
+	_ = m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE id = ?`, itemID).Scan(&seriesID)
+	if seriesID == "" {
+		_ = m.db.QueryRowContext(ctx, `SELECT id FROM episodes WHERE id = ?`, itemID).Scan(&episodeID)
+	}
 	m.mu.RUnlock()
-	if scanErr != nil || exists == "" {
-		return status.Errorf(codes.NotFound, "series not found: %s", itemID)
+	if seriesID == "" && episodeID == "" {
+		return status.Errorf(codes.NotFound, "item not found: %s", itemID)
 	}
 
 	relPath, mime, err := m.writeArtworkBytes(itemID, kind, filename, "", buf)
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	if episodeID != "" {
+		m.mu.Lock()
+		_, err = m.db.ExecContext(ctx,
+			`UPDATE episodes SET still_path=?, updated_at=? WHERE id=?`,
+			relPath, time.Now().UTC().Format(time.RFC3339), itemID,
+		)
+		m.mu.Unlock()
+		if err != nil {
+			return fmt.Errorf("update episode still path: %w", err)
+		}
+		return stream.SendAndClose(&mediaadminv1.ReplaceArtworkResponse{
+			Artwork: &mediaadminv1.ArtworkInfo{
+				Id: itemID + "_still", ItemId: itemID,
+				Type: "still", Url: artworkURL(m.httpAddr, relPath),
+				MimeType: mime,
+			},
+		})
 	}
 
 	col := "poster_path"
@@ -2290,6 +2382,7 @@ func (m *Module) seriesToMediaItem(s *tvmgmtv1.TVSeries) *mediaadminv1.MediaItem
 		"monitored":          strconv.FormatBool(s.GetMonitored()),
 		"quality_profile_id": s.GetQualityProfileId(),
 		"root_folder_path":   s.GetRootFolderPath(),
+		"series_type":        s.GetSeriesType(),
 	}
 	if s.GetTagline() != "" {
 		meta["tagline"] = s.GetTagline()

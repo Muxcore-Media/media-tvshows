@@ -211,6 +211,7 @@ message AddEpisodeFileResponse {
 message RemoveEpisodeFileRequest {
   string file_id = 1;
   bool delete_files = 2;
+  string episode_id = 3; // when file_id empty, remove the primary file for this episode
 }
 
 message RemoveEpisodeFileResponse {}
