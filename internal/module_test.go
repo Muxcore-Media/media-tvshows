@@ -244,12 +244,22 @@ func TestUpdateMetadata(t *testing.T) {
 		Title:       "Breaking Bad (Updated)",
 		Description: "New description",
 		Year:        2008,
+		Metadata: map[string]string{
+			"monitored":   "false",
+			"series_type": "anime",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if updated.Item.Title != "Breaking Bad (Updated)" {
 		t.Errorf("expected updated title, got %s", updated.Item.Title)
+	}
+	if updated.Item.Metadata["monitored"] != "false" {
+		t.Errorf("expected monitored=false, got %q", updated.Item.Metadata["monitored"])
+	}
+	if updated.Item.Metadata["series_type"] != "anime" {
+		t.Errorf("expected series_type=anime, got %q", updated.Item.Metadata["series_type"])
 	}
 }
 

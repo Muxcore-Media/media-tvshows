@@ -44,6 +44,8 @@ func normalizeArtworkKind(t string) (string, error) {
 		return "poster", nil
 	case "background", "backdrop":
 		return "backdrop", nil
+	case "still", "thumb", "titlecard", "title_card":
+		return "still", nil
 	default:
 		return "", fmt.Errorf("unknown artwork type: %s", t)
 	}
@@ -243,4 +245,41 @@ func (m *Module) buildArtworkInfos(itemID, poster, backdrop string) []*mediaadmi
 		})
 	}
 	return artwork
+}
+
+func (m *Module) buildEpisodeStillInfo(episodeID, still string) []*mediaadminv1.ArtworkInfo {
+	if !m.localArtworkExists(still) {
+		return nil
+	}
+	return []*mediaadminv1.ArtworkInfo{{
+		Id: episodeID + "_still", ItemId: episodeID,
+		Type: "still", Url: artworkURL(m.httpAddr, still),
+	}}
+}
+
+func (m *Module) resolveEpisodeStillPath(ctx context.Context, episodeID, stored string) string {
+	if stored == "" {
+		return ""
+	}
+	if m.localArtworkExists(stored) {
+		return stored
+	}
+	remote := resolveRemoteURL(stored)
+	if remote == "" {
+		return ""
+	}
+	rel, _, err := m.cacheRemoteArtwork(ctx, episodeID, "still", remote)
+	if err != nil {
+		slog.Debug("episode still heal failed", "episode_id", episodeID, "error", err)
+		return ""
+	}
+	m.mu.Lock()
+	if m.db != nil {
+		_, _ = m.db.ExecContext(ctx,
+			`UPDATE episodes SET still_path=?, updated_at=? WHERE id=?`,
+			rel, time.Now().UTC().Format(time.RFC3339), episodeID,
+		)
+	}
+	m.mu.Unlock()
+	return rel
 }

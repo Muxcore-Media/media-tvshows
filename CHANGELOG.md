@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.13] — 2026-08-20
+
+### Added
+- `ExportState`/`ImportState` Backupable; advertise `backupable`.
+- `RemoveEpisodeFile` accepts `episode_id` when `file_id` is empty (resolves primary episode file).
+
+## [0.1.12] — 2026-08-20
+
+### Added
+- `RemoveEpisodeFile` accepts `episode_id` when `file_id` is empty (resolves primary episode file).
+
+## [0.1.11] — 2026-08-20
+
+### Added
+- `UpdateMetadata` persists `monitored` (cascades seasons/episodes) and `series_type`.
+- Admin MediaItem metadata includes `series_type`.
+
 ## [0.1.10] — 2026-08-18
 
 ### Fixed
