@@ -14,13 +14,13 @@ func TestHistoryImportDeleteAndList(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1, 'Show', 2020, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, 1, 0, 'now', 'now')`)
 	m.mu.Unlock()
@@ -68,13 +68,13 @@ func TestHistoryGrabFromDownloadDispatched(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1, 'Show', 2020, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, 1, 0, 'now', 'now')`)
 	m.mu.Unlock()

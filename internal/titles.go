@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
+	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 )
 
 const (
@@ -25,8 +25,8 @@ const (
 )
 
 var (
-	reSpaces         = regexp.MustCompile(`\s+`)
-	reTrailingYear   = regexp.MustCompile(`(?i)\s*[\(\[]((?:19|20)\d{2})[\)\]]\s*$`)
+	reSpaces           = regexp.MustCompile(`\s+`)
+	reTrailingYear     = regexp.MustCompile(`(?i)\s*[\(\[]((?:19|20)\d{2})[\)\]]\s*$`)
 	reTrailingBareYear = regexp.MustCompile(`(?i)\s+((19|20)\d{2})$`)
 )
 
@@ -62,7 +62,7 @@ func yearsCompatible(want, have int32) bool {
 	if diff < 0 {
 		diff = -diff
 	}
-	return diff <= 2
+	return diff <= 1
 }
 
 func cleanMatchTitle(s string) string {
@@ -123,7 +123,7 @@ func (m *Module) backfillSeriesTitles(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id, name, original string
 		if err := rows.Scan(&id, &name, &original); err != nil {
@@ -210,7 +210,7 @@ func (m *Module) fetchSeriesAlternativeTitles(ctx context.Context, tmdbID int32)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	resp, err := metadatav1.NewMetadataServiceClient(conn).GetAlternativeTitles(ctx, &metadatav1.GetAlternativeTitlesRequest{
 		TmdbId: tmdbID,
@@ -244,7 +244,7 @@ func (m *Module) ListAlternateTitles(ctx context.Context, req *tvmgmtv1.ListAlte
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var titles []*tvmgmtv1.AlternateTitle
 	for rows.Next() {
 		var id, title, clean, source string

@@ -18,9 +18,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
+	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
-	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
 )
 
 func newTestModule(t *testing.T) *Module {
@@ -35,7 +35,7 @@ func newTestModule(t *testing.T) *Module {
 	if err := m.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	t.Cleanup(func() { m.Stop(ctx) })
+	t.Cleanup(func() { _ = m.Stop(ctx) })
 	return m
 }
 
@@ -97,8 +97,8 @@ func TestAddDuplicateTMDBID(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()
 
-	m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1668, Name: "Breaking Bad", Year: 2008})
-	m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1668, Name: "Breaking Bad", Year: 2008})
+	_, _ = m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1668, Name: "Breaking Bad", Year: 2008})
+	_, _ = m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1668, Name: "Breaking Bad", Year: 2008})
 
 	list, err := m.ListTVShows(ctx, &tvmgmtv1.ListTVShowsRequest{})
 	if err != nil {
@@ -131,7 +131,7 @@ func TestListTVShowsPagination(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{
+		_, _ = m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{
 			TmdbId: int32(100 + i),
 			Name:   fmt.Sprintf("Show %d", i+1),
 			Year:   2000 + int32(i),
@@ -162,9 +162,9 @@ func TestSearchTVShows(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()
 
-	m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1, Name: "Breaking Bad", Year: 2008})
-	m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 2, Name: "Better Call Saul", Year: 2015})
-	m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 3, Name: "Inception", Year: 2010})
+	_, _ = m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1, Name: "Breaking Bad", Year: 2008})
+	_, _ = m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 2, Name: "Better Call Saul", Year: 2015})
+	_, _ = m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 3, Name: "Inception", Year: 2010})
 
 	resp, err := m.ListTVShows(ctx, &tvmgmtv1.ListTVShowsRequest{Search: "breaking"})
 	if err != nil {
@@ -202,7 +202,7 @@ func TestListItems(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()
 
-	m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1, Name: "Test Show", Year: 2020})
+	_, _ = m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1, Name: "Test Show", Year: 2020})
 
 	resp, err := m.ListItems(ctx, &mediaadminv1.ListItemsRequest{Page: 1, PageSize: 20})
 	if err != nil {
@@ -281,7 +281,7 @@ func TestListArtwork(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, poster_path, backdrop_path, monitored, created_at, updated_at)
 		 VALUES ('test123', 1, 'Test', 2020, ?, ?, 1, 'now', 'now')`, relPoster, relBackdrop)
 	m.mu.Unlock()
@@ -307,13 +307,13 @@ func TestUpdateEpisodeMonitored(t *testing.T) {
 
 	mod := m
 	mod.mu.Lock()
-	mod.db.ExecContext(ctx,
+	_, _ = mod.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1, 'Test', 2020, 1, 'now', 'now')`)
-	mod.db.ExecContext(ctx,
+	_, _ = mod.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	mod.db.ExecContext(ctx,
+	_, _ = mod.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, 1, 1, 0, 'now', 'now')`)
 	mod.mu.Unlock()
@@ -328,7 +328,7 @@ func TestUpdateEpisodeMonitored(t *testing.T) {
 
 	var monitored int
 	mod.mu.RLock()
-	mod.db.QueryRowContext(ctx, `SELECT monitored FROM episodes WHERE id = 'ep1'`).Scan(&monitored)
+	_ = mod.db.QueryRowContext(ctx, `SELECT monitored FROM episodes WHERE id = 'ep1'`).Scan(&monitored)
 	mod.mu.RUnlock()
 	if monitored != 0 {
 		t.Errorf("expected monitored=0, got %d", monitored)
@@ -341,13 +341,13 @@ func TestUpdateSeasonMonitored(t *testing.T) {
 
 	mod := m
 	mod.mu.Lock()
-	mod.db.ExecContext(ctx,
+	_, _ = mod.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1, 'Test', 2020, 1, 'now', 'now')`)
-	mod.db.ExecContext(ctx,
+	_, _ = mod.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	mod.db.ExecContext(ctx,
+	_, _ = mod.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, 1, 1, 0, 'now', 'now')`)
 	mod.mu.Unlock()
@@ -362,14 +362,14 @@ func TestUpdateSeasonMonitored(t *testing.T) {
 
 	var monitored int
 	mod.mu.RLock()
-	mod.db.QueryRowContext(ctx, `SELECT monitored FROM seasons WHERE id = 'se1'`).Scan(&monitored)
+	_ = mod.db.QueryRowContext(ctx, `SELECT monitored FROM seasons WHERE id = 'se1'`).Scan(&monitored)
 	mod.mu.RUnlock()
 	if monitored != 0 {
 		t.Errorf("expected season monitored=0, got %d", monitored)
 	}
 
 	mod.mu.RLock()
-	mod.db.QueryRowContext(ctx, `SELECT monitored FROM episodes WHERE id = 'ep1'`).Scan(&monitored)
+	_ = mod.db.QueryRowContext(ctx, `SELECT monitored FROM episodes WHERE id = 'ep1'`).Scan(&monitored)
 	mod.mu.RUnlock()
 	if monitored != 0 {
 		t.Errorf("expected episode monitored=0, got %d", monitored)
@@ -408,10 +408,10 @@ func TestPopulateEpisodesFromSeason(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1396, 'Breaking Bad', 2008, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('sea_s1_1', 's1', 1, 1, 'now', 'now')`)
 	m.mu.Unlock()
@@ -444,7 +444,7 @@ func TestPopulateEpisodesFromSeason(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, monitored = 0 WHERE id = ?`, id)
+	_, _ = m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, monitored = 0 WHERE id = ?`, id)
 	m.mu.Unlock()
 
 	eps[0].Name = "Pilot (Updated)"
@@ -474,10 +474,10 @@ func TestPopulateEpisodesInheritsSeasonMonitored(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1, 'Test', 2020, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('sea_s1_1', 's1', 1, 0, 'now', 'now')`)
 	m.mu.Unlock()
@@ -488,7 +488,7 @@ func TestPopulateEpisodesInheritsSeasonMonitored(t *testing.T) {
 
 	var monitored int
 	m.mu.RLock()
-	m.db.QueryRowContext(ctx, `SELECT monitored FROM episodes WHERE id = 'ep_s1_1_1'`).Scan(&monitored)
+	_ = m.db.QueryRowContext(ctx, `SELECT monitored FROM episodes WHERE id = 'ep_s1_1_1'`).Scan(&monitored)
 	m.mu.RUnlock()
 	if monitored != 0 {
 		t.Errorf("expected monitored=0 from season, got %d", monitored)
@@ -500,10 +500,10 @@ func TestImportMatchSetsHasFile(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1396, 'Breaking Bad', 2008, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('sea_s1_1', 's1', 1, 1, 'now', 'now')`)
 	m.mu.Unlock()
@@ -518,12 +518,12 @@ func TestImportMatchSetsHasFile(t *testing.T) {
 
 	m.mu.RLock()
 	var seriesID string
-	m.db.QueryRow(
+	_ = m.db.QueryRow(
 		`SELECT id FROM series WHERE name = ? AND (year = ? OR ? = 0) LIMIT 1`,
 		title, year, year,
 	).Scan(&seriesID)
 	var episodeID string
-	m.db.QueryRow(
+	_ = m.db.QueryRow(
 		`SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
 		seriesID, seasonNum, episodeNum,
 	).Scan(&episodeID)
@@ -545,7 +545,7 @@ func TestImportMatchSetsHasFile(t *testing.T) {
 
 	var hasFile int
 	m.mu.RLock()
-	m.db.QueryRowContext(ctx, `SELECT has_file FROM episodes WHERE id = ?`, episodeID).Scan(&hasFile)
+	_ = m.db.QueryRowContext(ctx, `SELECT has_file FROM episodes WHERE id = ?`, episodeID).Scan(&hasFile)
 	m.mu.RUnlock()
 	if hasFile != 1 {
 		t.Errorf("expected has_file=1 after import match, got %d", hasFile)
@@ -608,8 +608,8 @@ func TestHandleFileImportedTVStubEpisode(t *testing.T) {
 	var hasFile int
 	var path string
 	m.mu.RLock()
-	m.db.QueryRow(`SELECT has_file FROM episodes WHERE id = ?`, epID).Scan(&hasFile)
-	m.db.QueryRow(`SELECT file_path FROM episode_files WHERE episode_id = ?`, epID).Scan(&path)
+	_ = m.db.QueryRow(`SELECT has_file FROM episodes WHERE id = ?`, epID).Scan(&hasFile)
+	_ = m.db.QueryRow(`SELECT file_path FROM episode_files WHERE episode_id = ?`, epID).Scan(&path)
 	m.mu.RUnlock()
 	if hasFile != 1 {
 		t.Errorf("expected has_file=1, got %d", hasFile)
@@ -845,16 +845,16 @@ func TestListMissingEpisodes(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, quality_profile_id, created_at, updated_at)
 		 VALUES ('s1', 1396, 'Breaking Bad', 2008, 1, 'qp_tv', 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s2', 2, 'Other', 2010, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now'), ('se2', 's2', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES
 		 ('ep_miss', 's1', 'se1', 1, 1, 1, 1, 0, 'now', 'now'),
@@ -892,13 +892,13 @@ func TestListMissingExcludesSeasonZeroSpecials(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 253, 'Star Trek', 1966, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se0', 's1', 0, 1, 'now', 'now'), ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES
 		 ('ep_s00e03', 's1', 'se0', 1, 3, 0, 1, 0, 'now', 'now'),
@@ -922,13 +922,13 @@ func TestListMissingExcludesUnaired(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, series_type, created_at, updated_at)
 		 VALUES ('s1', 1, 'Show', 2020, 1, 'standard', 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, air_date, absolute_number, monitored, has_file, created_at, updated_at)
 		 VALUES
 		 ('ep_aired', 's1', 'se1', 1, 1, '2020-01-01', 1, 1, 0, 'now', 'now'),
@@ -955,13 +955,13 @@ func TestMultiEpisodeFileLink(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1, 'Show', 2020, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, 1, 0, 'now', 'now'),
 		        ('ep2', 's1', 'se1', 2, 1, 1, 0, 'now', 'now')`)
@@ -981,10 +981,10 @@ func TestMultiEpisodeFileLink(t *testing.T) {
 
 	var has1, has2 int
 	m.mu.RLock()
-	m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep1'`).Scan(&has1)
-	m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep2'`).Scan(&has2)
+	_ = m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep1'`).Scan(&has1)
+	_ = m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep2'`).Scan(&has2)
 	var linkCount int
-	m.db.QueryRow(`SELECT COUNT(*) FROM episode_files WHERE file_path=?`, "media/TV/Show/Season 01/Show.S01E01-E02.mkv").Scan(&linkCount)
+	_ = m.db.QueryRow(`SELECT COUNT(*) FROM episode_files WHERE file_path=?`, "media/TV/Show/Season 01/Show.S01E01-E02.mkv").Scan(&linkCount)
 	m.mu.RUnlock()
 	if has1 != 1 || has2 != 1 {
 		t.Fatalf("both episodes should have file: %d %d", has1, has2)
@@ -998,9 +998,9 @@ func TestMultiEpisodeFileLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.mu.RLock()
-	m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep1'`).Scan(&has1)
-	m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep2'`).Scan(&has2)
-	m.db.QueryRow(`SELECT COUNT(*) FROM episode_files`).Scan(&linkCount)
+	_ = m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep1'`).Scan(&has1)
+	_ = m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep2'`).Scan(&has2)
+	_ = m.db.QueryRow(`SELECT COUNT(*) FROM episode_files`).Scan(&linkCount)
 	m.mu.RUnlock()
 	if has1 != 0 || has2 != 0 || linkCount != 0 {
 		t.Fatalf("remove should clear links: has=%d/%d count=%d", has1, has2, linkCount)
@@ -1012,13 +1012,13 @@ func TestRenumberAbsoluteEpisodes(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, series_type, created_at, updated_at)
 		 VALUES ('s1', 1, 'Anime', 2020, 1, 'anime', 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se0', 's1', 0, 1, 'now', 'now'), ('se1', 's1', 1, 1, 'now', 'now'), ('se2', 's1', 2, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, absolute_number, monitored, has_file, created_at, updated_at)
 		 VALUES
 		 ('sp', 's1', 'se0', 1, 0, 0, 1, 0, 'now', 'now'),
@@ -1031,10 +1031,10 @@ func TestRenumberAbsoluteEpisodes(t *testing.T) {
 
 	var a1, a2, a3, asp int
 	m.mu.RLock()
-	m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='e1'`).Scan(&a1)
-	m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='e2'`).Scan(&a2)
-	m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='e3'`).Scan(&a3)
-	m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='sp'`).Scan(&asp)
+	_ = m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='e1'`).Scan(&a1)
+	_ = m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='e2'`).Scan(&a2)
+	_ = m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='e3'`).Scan(&a3)
+	_ = m.db.QueryRow(`SELECT absolute_number FROM episodes WHERE id='sp'`).Scan(&asp)
 	m.mu.RUnlock()
 	if a1 != 1 || a2 != 2 || a3 != 3 {
 		t.Fatalf("absolute numbering want 1,2,3 got %d,%d,%d", a1, a2, a3)
@@ -1052,13 +1052,13 @@ func TestUpdateTVShowMonitoredCascades(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1, 'Show', 2020, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, 1, 0, 'now', 'now')`)
 	m.mu.Unlock()
@@ -1070,8 +1070,8 @@ func TestUpdateTVShowMonitoredCascades(t *testing.T) {
 	}
 	var sm, em int
 	m.mu.RLock()
-	m.db.QueryRow(`SELECT monitored FROM seasons WHERE id='se1'`).Scan(&sm)
-	m.db.QueryRow(`SELECT monitored FROM episodes WHERE id='ep1'`).Scan(&em)
+	_ = m.db.QueryRow(`SELECT monitored FROM seasons WHERE id='se1'`).Scan(&sm)
+	_ = m.db.QueryRow(`SELECT monitored FROM episodes WHERE id='ep1'`).Scan(&em)
 	m.mu.RUnlock()
 	if sm != 0 || em != 0 {
 		t.Fatalf("cascade failed season=%d ep=%d", sm, em)
@@ -1109,13 +1109,13 @@ func TestDailyImportMatchByAirDate(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, series_type, created_at, updated_at)
 		 VALUES ('s1', 1, 'Daily Show', 2020, 1, 'daily', 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, air_date, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, '2024-03-15', 1, 0, 'now', 'now')`)
 	m.mu.Unlock()
@@ -1139,7 +1139,7 @@ func TestDailyImportMatchByAirDate(t *testing.T) {
 	}
 	var hasFile int
 	m.mu.RLock()
-	m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep1'`).Scan(&hasFile)
+	_ = m.db.QueryRow(`SELECT has_file FROM episodes WHERE id='ep1'`).Scan(&hasFile)
 	m.mu.RUnlock()
 	if hasFile != 1 {
 		t.Fatalf("has_file=%d", hasFile)
@@ -1171,10 +1171,10 @@ func TestTagsAndCalendar(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', ?, 1, 1, 'now', 'now')`, add.SeriesId)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, name, air_date, monitored, has_file, created_at, updated_at)
 		 VALUES ('epc', ?, 'se1', 1, 1, 'Pilot', '2024-06-01', 1, 0, 'now', 'now')`, add.SeriesId)
 	m.mu.Unlock()
@@ -1212,10 +1212,10 @@ func TestMediaAdminLibraryAdapters(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', ?, 1, 1, 'now', 'now')`, add.SeriesId)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, name, air_date, monitored, has_file, created_at, updated_at)
 		 VALUES ('epc', ?, 'se1', 1, 1, 'Pilot', '2024-06-01', 1, 0, 'now', 'now')`, add.SeriesId)
 	m.mu.Unlock()
@@ -1249,16 +1249,16 @@ func TestRemoveTVShowDeleteFiles(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, year, monitored, root_folder_path, created_at, updated_at)
 		 VALUES ('s1', 1, 'Show', 2020, 1, ?, 'now', 'now')`, root)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
 		 VALUES ('ep1', 's1', 'se1', 1, 1, 1, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episode_files (id, episode_id, file_path, quality, size_bytes, container, created_at)
 		 VALUES ('f1', 'ep1', ?, '1080p', 1, 'mkv', 'now')`, f)
 	m.mu.Unlock()
@@ -1277,13 +1277,13 @@ func TestLookupEpisode(t *testing.T) {
 	ctx := context.Background()
 
 	m.mu.Lock()
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO series (id, tmdb_id, name, original_name, year, monitored, created_at, updated_at)
 		 VALUES ('s1', 1396, 'Breaking Bad', 'Breaking Bad', 2008, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
 		 VALUES ('se1', 's1', 5, 1, 'now', 'now')`)
-	m.db.ExecContext(ctx,
+	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, name, air_date, absolute_number, monitored, has_file, created_at, updated_at)
 		 VALUES
 		 ('ep1', 's1', 'se1', 1, 5, 'Live Free or Die', '2012-07-15', 50, 1, 0, 'now', 'now'),
@@ -1427,4 +1427,3 @@ func TestGetTVShowLoadsManyEpisodes(t *testing.T) {
 			len(get.Series.Seasons), len(get.Series.Seasons[0].Episodes))
 	}
 }
-

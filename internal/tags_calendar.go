@@ -55,7 +55,7 @@ func (m *Module) ListTags(ctx context.Context, req *tvmgmtv1.ListTagsRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var tags []*tvmgmtv1.Tag
 	for rows.Next() {
 		var id, label, created string
@@ -120,7 +120,7 @@ func (m *Module) GetCalendar(ctx context.Context, req *tvmgmtv1.GetCalendarReque
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []*tvmgmtv1.CalendarItem
 	for rows.Next() {
