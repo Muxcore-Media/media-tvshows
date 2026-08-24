@@ -22,14 +22,14 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	automationv1 "github.com/Muxcore-Media/contracts-automation/muxcore/automation/v1"
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
+	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	"github.com/Muxcore-Media/core/sdk/go/client"
 	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
-	automationv1 "github.com/Muxcore-Media/contracts-automation/muxcore/automation/v1"
 	rootsv1 "github.com/Muxcore-Media/media-root-folders/proto/rootsv1"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
-	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
 	_ "modernc.org/sqlite"
 )
 
@@ -140,11 +140,11 @@ func (m *Module) Init(ctx context.Context) error {
 	db.SetMaxOpenConns(sqliteMaxOpenConns)
 
 	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode=WAL`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("enable WAL: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA busy_timeout=5000`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("set busy_timeout: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -174,7 +174,7 @@ func (m *Module) Init(ctx context.Context) error {
 			updated_at    TEXT NOT NULL
 		)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create series table: %w", err)
 	}
 	for _, col := range []string{
@@ -183,7 +183,7 @@ func (m *Module) Init(ctx context.Context) error {
 		`ALTER TABLE series ADD COLUMN series_type TEXT DEFAULT 'standard'`,
 	} {
 		if _, err := db.ExecContext(ctx, col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
-			db.Close()
+			_ = db.Close()
 			return fmt.Errorf("migrate series: %w", err)
 		}
 	}
@@ -203,7 +203,7 @@ func (m *Module) Init(ctx context.Context) error {
 			FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE CASCADE
 		)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create seasons table: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -227,31 +227,31 @@ func (m *Module) Init(ctx context.Context) error {
 			FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE
 		)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create episodes table: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
 		CREATE INDEX IF NOT EXISTS idx_series_name ON series(name)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create series index: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
 		CREATE INDEX IF NOT EXISTS idx_episodes_series ON episodes(series_id)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create episodes series index: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
 		CREATE INDEX IF NOT EXISTS idx_episodes_season ON episodes(season_id)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create episodes season index: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
 		CREATE INDEX IF NOT EXISTS idx_seasons_series ON seasons(series_id)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create seasons series index: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -265,13 +265,13 @@ func (m *Module) Init(ctx context.Context) error {
 			created_at TEXT NOT NULL
 		)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create episode_files table: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
 		CREATE INDEX IF NOT EXISTS idx_episode_files_ep ON episode_files(episode_id)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create episode files index: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -281,7 +281,7 @@ func (m *Module) Init(ctx context.Context) error {
 			created_at TEXT NOT NULL
 		)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create tags table: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -291,7 +291,7 @@ func (m *Module) Init(ctx context.Context) error {
 			PRIMARY KEY (item_id, tag_id)
 		)
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("create item_tags table: %w", err)
 	}
 
@@ -299,12 +299,12 @@ func (m *Module) Init(ctx context.Context) error {
 	m.db = db
 	if err := m.ensureHistoryTable(ctx); err != nil {
 		m.mu.Unlock()
-		db.Close()
+		_ = db.Close()
 		return err
 	}
 	if err := m.ensureSeriesTitlesTable(ctx); err != nil {
 		m.mu.Unlock()
-		db.Close()
+		_ = db.Close()
 		return err
 	}
 	m.backfillSeriesTitles(ctx)
@@ -312,14 +312,14 @@ func (m *Module) Init(ctx context.Context) error {
 
 	grpcLis, err := net.Listen("tcp", m.grpcAddr)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("listen gRPC %s: %w", m.grpcAddr, err)
 	}
 	m.grpcLis = grpcLis
 
 	httpLis, err := net.Listen("tcp", m.httpAddr)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("listen HTTP %s: %w", m.httpAddr, err)
 	}
 	m.httpLis = httpLis
@@ -366,7 +366,7 @@ func (m *Module) Start(ctx context.Context) error {
 
 func (m *Module) Stop(ctx context.Context) error {
 	if m.httpSrv != nil {
-		m.httpSrv.Shutdown(ctx)
+		_ = m.httpSrv.Shutdown(ctx)
 	}
 	if m.grpcSrv != nil {
 		m.grpcSrv.GracefulStop()
@@ -375,11 +375,11 @@ func (m *Module) Stop(ctx context.Context) error {
 		_ = m.rootsConn.Close()
 	}
 	if m.mc != nil {
-		m.mc.Close()
+		_ = m.mc.Close()
 	}
 	m.mu.Lock()
 	if m.db != nil {
-		m.db.Close()
+		_ = m.db.Close()
 		m.db = nil
 	}
 	m.mu.Unlock()
@@ -654,7 +654,7 @@ func (m *Module) findSeries(tmdbID int32, title string, year int32) (string, int
 	if err != nil {
 		return "", 0
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var rowID string
 		var rowTMDB, rowYear int32
@@ -710,7 +710,7 @@ func (m *Module) loadSeriesHasFile(ctx context.Context, db *sql.DB, series []*tv
 		slog.Debug("load series has_file flags", "error", err)
 		return out
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id string
 		var has int
@@ -802,7 +802,7 @@ func (m *Module) searchTVMetadata(ctx context.Context, title string, year int32)
 	if err != nil {
 		return nil, fmt.Errorf("dial metadata: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	metaClient := metadatav1.NewMetadataServiceClient(conn)
 	resp, err := metaClient.Search(ctx, &metadatav1.SearchRequest{
@@ -1099,7 +1099,7 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 				filePaths[p] = struct{}{}
 			}
 		}
-		rows.Close()
+		_ = rows.Close()
 	}
 
 	if req.GetDeleteFiles() {
@@ -1154,7 +1154,7 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 	}
 	var tmdbID int32
 	var seriesName string
-	db.QueryRowContext(ctx, `SELECT tmdb_id, name FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&tmdbID, &seriesName)
+	_ = db.QueryRowContext(ctx, `SELECT tmdb_id, name FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&tmdbID, &seriesName)
 
 	if tmdbID == 0 {
 		return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
@@ -1169,7 +1169,7 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 	if err != nil {
 		return nil, fmt.Errorf("dial metadata: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	metaClient := metadatav1.NewMetadataServiceClient(conn)
 	details, err := metaClient.GetTVDetails(ctx, &metadatav1.GetTVDetailsRequest{
@@ -1324,7 +1324,7 @@ func (m *Module) renumberAbsoluteEpisodes(ctx context.Context, seriesID string) 
 		}
 		ids = append(ids, id)
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	for i, id := range ids {
@@ -1354,7 +1354,7 @@ func (m *Module) populateSeasonsFromMetadata(ctx context.Context, seriesID strin
 		slog.Debug("dial metadata for season population", "error", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	metaClient := metadatav1.NewMetadataServiceClient(conn)
 	details, err := metaClient.GetTVDetails(ctx, &metadatav1.GetTVDetailsRequest{
@@ -1415,7 +1415,9 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	}
 
 	var total int
-	db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count series: %w", err)
+	}
 
 	sortBy := req.GetSortBy()
 	if sortBy == "" {
@@ -1439,7 +1441,7 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	if err != nil {
 		return nil, fmt.Errorf("query series: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var seriesList []*tvmgmtv1.TVSeries
 	for rows.Next() {
@@ -1501,7 +1503,7 @@ func (m *Module) ListMissing(ctx context.Context, req *tvmgmtv1.ListMissingReque
 	if err != nil {
 		return nil, fmt.Errorf("query missing episodes: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []*tvmgmtv1.MissingEpisodeItem
 	for rows.Next() {
@@ -1742,7 +1744,9 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 		if err != nil {
 			return nil, fmt.Errorf("insert episode file: %w", err)
 		}
-		db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, episodeID)
+		if _, err := db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, episodeID); err != nil {
+			return nil, fmt.Errorf("update episode has_file: %w", err)
+		}
 
 		epID := episodeID
 		fileID := id
@@ -1809,7 +1813,7 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 			episodeIDs = append(episodeIDs, epID)
 		}
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	if req.GetDeleteFiles() {
 		var rootFolder string
@@ -1854,9 +1858,13 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, episodeID := range episodeIDs {
 		var count int
-		m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM episode_files WHERE episode_id = ?`, episodeID).Scan(&count)
+		if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM episode_files WHERE episode_id = ?`, episodeID).Scan(&count); err != nil {
+			return nil, fmt.Errorf("count episode files: %w", err)
+		}
 		if count == 0 {
-			m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 0, updated_at = ? WHERE id = ?`, now, episodeID)
+			if _, err := m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 0, updated_at = ? WHERE id = ?`, now, episodeID); err != nil {
+				return nil, fmt.Errorf("clear episode has_file: %w", err)
+			}
 		}
 		go m.publish(context.Background(), contracts.EventTVEpisodeFileRemoved, map[string]interface{}{
 			"file_id": req.GetFileId(), "episode_id": episodeID, "series_id": seriesID, "file_path": filePath,
@@ -1878,7 +1886,7 @@ func (m *Module) loadSeasons(ctx context.Context, db *sql.DB, seriesID string) (
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var seasons []*tvmgmtv1.TVSeason
 	byID := make(map[string]*tvmgmtv1.TVSeason)
@@ -1905,7 +1913,7 @@ func (m *Module) loadSeasons(ctx context.Context, db *sql.DB, seriesID string) (
 	if err != nil {
 		return nil, err
 	}
-	defer epRows.Close()
+	defer func() { _ = epRows.Close() }()
 	for epRows.Next() {
 		ep := m.scanEpisode(epRows)
 		if ep == nil {
@@ -1919,29 +1927,6 @@ func (m *Module) loadSeasons(ctx context.Context, db *sql.DB, seriesID string) (
 		return nil, err
 	}
 	return seasons, nil
-}
-
-func (m *Module) loadEpisodes(ctx context.Context, db *sql.DB, seasonID string) ([]*tvmgmtv1.TVEpisode, error) {
-	rows, err := db.QueryContext(ctx,
-		`SELECT id, series_id, season_id, tmdb_id, episode_number, season_number,
-		 absolute_number, name, overview, air_date, still_path, monitored, has_file,
-		 created_at, updated_at
-		 FROM episodes WHERE season_id = ? ORDER BY episode_number`,
-		seasonID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var episodes []*tvmgmtv1.TVEpisode
-	for rows.Next() {
-		ep := m.scanEpisode(rows)
-		if ep != nil {
-			episodes = append(episodes, ep)
-		}
-	}
-	return episodes, nil
 }
 
 // ── Scan helpers ───────────────────────────────────────────────
@@ -1962,7 +1947,7 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 	}
 
 	var genres []string
-	json.Unmarshal([]byte(genresStr), &genres)
+	_ = json.Unmarshal([]byte(genresStr), &genres)
 	if genres == nil {
 		genres = []string{}
 	}
@@ -2008,7 +1993,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 	}
 
 	var genres []string
-	json.Unmarshal([]byte(genresStr), &genres)
+	_ = json.Unmarshal([]byte(genresStr), &genres)
 	if genres == nil {
 		genres = []string{}
 	}
@@ -2154,7 +2139,9 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	}
 
 	var total int
-	db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count items: %w", err)
+	}
 
 	query += fmt.Sprintf(` ORDER BY %s %s LIMIT ? OFFSET ?`, sortBy, sortOrder)
 	qargs := append(args, pageSize, offset)
@@ -2163,7 +2150,7 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	if err != nil {
 		return nil, fmt.Errorf("query items: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []*mediaadminv1.MediaItem
 	for rows.Next() {
@@ -2532,7 +2519,7 @@ func (m *Module) handleStreamEpisode(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	st, err := f.Stat()
 	if err != nil || st.IsDir() {

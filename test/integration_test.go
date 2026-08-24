@@ -29,7 +29,7 @@ func TestModuleRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial core: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	reg := modulev1.NewModuleRegistrationClient(conn)
 	resp, err := reg.Register(ctx, &modulev1.RegisterRequest{

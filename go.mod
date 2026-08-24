@@ -17,14 +17,16 @@ require (
 )
 
 require (
+	github.com/Muxcore-Media/contracts-media v0.1.0 // indirect
+	github.com/Muxcore-Media/core/pkg/tenant v0.5.8 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
 	modernc.org/libc v1.74.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -35,4 +37,16 @@ replace github.com/Muxcore-Media/contracts-scanner => ../contracts-scanner
 
 replace github.com/Muxcore-Media/contracts-automation => ../contracts-automation
 
+replace github.com/Muxcore-Media/contracts-media-admin => ../contracts-media-admin
+
 replace github.com/Muxcore-Media/contracts-metadata => ../contracts-metadata
+
+replace github.com/Muxcore-Media/core => ../core
+
+replace github.com/Muxcore-Media/core/pkg/contracts => ../core/pkg/contracts
+
+replace github.com/Muxcore-Media/core/sdk/go/client => ../core/sdk/go/client
+
+replace github.com/Muxcore-Media/core/sdk/go/module => ../core/sdk/go/module
+
+replace github.com/Muxcore-Media/media-root-folders => ../media-root-folders
