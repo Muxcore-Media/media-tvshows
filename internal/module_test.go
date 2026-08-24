@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -19,7 +20,7 @@ import (
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
-	metadatav1 "github.com/Muxcore-Media/metadata-tmdb/proto/metadatav1"
+	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
 )
 
 func newTestModule(t *testing.T) *Module {
@@ -1335,6 +1336,95 @@ func TestPickBestSearchResultRequiresYear(t *testing.T) {
 	got = pickBestSearchResult(results[:1], 2014, false)
 	if got != nil {
 		t.Fatalf("year miss should not fall back, got %+v", got)
+	}
+}
+
+func TestListTVShowsConcurrentWithEpisodePopulate(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+
+	add, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1668, Name: "Breaking Bad", Year: 2008})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	episodes := make([]*metadatav1.Episode, 80)
+	for i := range episodes {
+		episodes[i] = &metadatav1.Episode{
+			Id:            int32(1000 + i),
+			EpisodeNumber: int32(i + 1),
+			SeasonNumber:  1,
+			Name:          fmt.Sprintf("Episode %d", i+1),
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		seasonID := fmt.Sprintf("sea_%s_1", add.SeriesId)
+		m.populateEpisodesFromSeason(ctx, add.SeriesId, seasonID, 1, episodes)
+	}()
+
+	listCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	for {
+		select {
+		case <-done:
+			return
+		case <-listCtx.Done():
+			t.Fatal("ListTVShows blocked while episodes were populated")
+		default:
+			if _, err := m.ListTVShows(ctx, &tvmgmtv1.ListTVShowsRequest{Page: 1, PageSize: 20}); err != nil {
+				t.Fatalf("ListTVShows: %v", err)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+}
+
+func TestGetTVShowLoadsManyEpisodes(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+
+	add, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1, Name: "Long Runner", Year: 2000})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db := m.dbConn()
+	if db == nil {
+		t.Fatal("db not initialized")
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	seasonID := fmt.Sprintf("sea_%s_1", add.SeriesId)
+	_, err = db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO seasons (id, series_id, season_number, name, monitored, created_at, updated_at)
+		 VALUES (?, ?, 1, 'Season 1', 1, ?, ?)`, seasonID, add.SeriesId, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 200; i++ {
+		epID := fmt.Sprintf("ep_%s_1_%d", add.SeriesId, i)
+		_, err = db.ExecContext(ctx,
+			`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, name, monitored, has_file, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+			epID, add.SeriesId, seasonID, i, fmt.Sprintf("Episode %d", i), now, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	start := time.Now()
+	get, err := m.GetTVShow(ctx, &tvmgmtv1.GetTVShowRequest{SeriesId: add.SeriesId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("GetTVShow took %s for 200 episodes", time.Since(start))
+	}
+	if len(get.Series.Seasons) != 1 || len(get.Series.Seasons[0].Episodes) != 200 {
+		t.Fatalf("expected 1 season with 200 episodes, got %d seasons / %d eps",
+			len(get.Series.Seasons), len(get.Series.Seasons[0].Episodes))
 	}
 }
 

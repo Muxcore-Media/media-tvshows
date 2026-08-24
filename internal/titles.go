@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
-	metadatav1 "github.com/Muxcore-Media/metadata-tmdb/proto/metadatav1"
+	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
 )
 
 const (
@@ -25,25 +25,44 @@ const (
 )
 
 var (
-	reSpaces       = regexp.MustCompile(`\s+`)
-	reTrailingYear = regexp.MustCompile(`(?i)\s*[\(\[]((?:19|20)\d{2})[\)\]]\s*$`)
+	reSpaces         = regexp.MustCompile(`\s+`)
+	reTrailingYear   = regexp.MustCompile(`(?i)\s*[\(\[]((?:19|20)\d{2})[\)\]]\s*$`)
+	reTrailingBareYear = regexp.MustCompile(`(?i)\s+((19|20)\d{2})$`)
 )
 
 func splitTitleYear(title string, year int32) (string, int32) {
 	title = strings.TrimSpace(title)
-	m := reTrailingYear.FindStringSubmatch(title)
-	if len(m) < 2 {
-		return title, year
+	if m := reTrailingYear.FindStringSubmatch(title); len(m) >= 2 {
+		y, err := strconv.Atoi(m[1])
+		if err == nil && y >= 1900 {
+			title = strings.TrimSpace(reTrailingYear.ReplaceAllString(title, ""))
+			if year == 0 {
+				year = int32(y)
+			}
+			return title, year
+		}
 	}
-	y, err := strconv.Atoi(m[1])
-	if err != nil || y < 1900 {
-		return title, year
-	}
-	title = strings.TrimSpace(reTrailingYear.ReplaceAllString(title, ""))
-	if year == 0 {
-		year = int32(y)
+	if m := reTrailingBareYear.FindStringSubmatch(title); len(m) >= 2 {
+		y, err := strconv.Atoi(m[1])
+		if err == nil && y >= 1900 {
+			title = strings.TrimSpace(reTrailingBareYear.ReplaceAllString(title, ""))
+			if year == 0 {
+				year = int32(y)
+			}
+		}
 	}
 	return title, year
+}
+
+func yearsCompatible(want, have int32) bool {
+	if want == 0 || have == 0 {
+		return true
+	}
+	diff := want - have
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= 2
 }
 
 func cleanMatchTitle(s string) string {

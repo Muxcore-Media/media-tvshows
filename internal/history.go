@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -107,10 +108,10 @@ func (m *Module) subscribeToDownloadDispatched() {
 	slog.Info("subscribed to download dispatched events")
 }
 
-func (m *Module) resolveSeriesIDForGrab(ctx context.Context, p contracts.DownloadDispatchedPayload) (seriesID, title string) {
+func (m *Module) resolveSeriesIDForGrab(ctx context.Context, db *sql.DB, p contracts.DownloadDispatchedPayload) (seriesID, title string) {
 	if p.SeriesID != "" {
 		var name string
-		err := m.db.QueryRowContext(ctx, `SELECT name FROM series WHERE id = ?`, p.SeriesID).Scan(&name)
+		err := db.QueryRowContext(ctx, `SELECT name FROM series WHERE id = ?`, p.SeriesID).Scan(&name)
 		if err == nil {
 			return p.SeriesID, name
 		}
@@ -122,13 +123,13 @@ func (m *Module) resolveSeriesIDForGrab(ctx context.Context, p contracts.Downloa
 	if idx := strings.Index(itemID, ":S"); idx > 0 && strings.HasSuffix(itemID, ":pack") {
 		candidate := itemID[:idx]
 		var name string
-		err := m.db.QueryRowContext(ctx, `SELECT name FROM series WHERE id = ?`, candidate).Scan(&name)
+		err := db.QueryRowContext(ctx, `SELECT name FROM series WHERE id = ?`, candidate).Scan(&name)
 		if err == nil {
 			return candidate, name
 		}
 	}
 	var sid, name string
-	err := m.db.QueryRowContext(ctx,
+	err := db.QueryRowContext(ctx,
 		`SELECT e.series_id, s.name FROM episodes e INNER JOIN series s ON s.id = e.series_id WHERE e.id = ?`,
 		itemID,
 	).Scan(&sid, &name)
@@ -147,13 +148,12 @@ func (m *Module) handleDownloadDispatched(ctx context.Context, p contracts.Downl
 		return
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return
 	}
 
-	seriesID, title := m.resolveSeriesIDForGrab(ctx, p)
+	seriesID, title := m.resolveSeriesIDForGrab(ctx, db, p)
 	if seriesID == "" {
 		return
 	}
