@@ -26,10 +26,10 @@ import (
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	"github.com/Muxcore-Media/core/sdk/go/client"
 	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
-	automationv1 "github.com/Muxcore-Media/media-automation/proto/automationv1"
+	automationv1 "github.com/Muxcore-Media/contracts-automation/muxcore/automation/v1"
 	rootsv1 "github.com/Muxcore-Media/media-root-folders/proto/rootsv1"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
-	metadatav1 "github.com/Muxcore-Media/metadata-tmdb/proto/metadatav1"
+	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
 	_ "modernc.org/sqlite"
 )
 
@@ -137,11 +137,15 @@ func (m *Module) Init(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("open sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(sqliteMaxOpenConns)
 
 	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode=WAL`); err != nil {
 		db.Close()
 		return fmt.Errorf("enable WAL: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `PRAGMA busy_timeout=5000`); err != nil {
+		db.Close()
+		return fmt.Errorf("set busy_timeout: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS series (
@@ -559,13 +563,12 @@ func (m *Module) resolveImportEpisodeIDs(ctx context.Context, seriesID string, t
 }
 
 func (m *Module) getSeriesType(seriesID string) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return "standard"
 	}
 	var st string
-	_ = m.db.QueryRow(`SELECT COALESCE(series_type, 'standard') FROM series WHERE id = ?`, seriesID).Scan(&st)
+	_ = db.QueryRow(`SELECT COALESCE(series_type, 'standard') FROM series WHERE id = ?`, seriesID).Scan(&st)
 	if st == "" {
 		return "standard"
 	}
@@ -627,15 +630,14 @@ func (m *Module) resolveSeriesForImport(ctx context.Context, p contracts.FileImp
 }
 
 func (m *Module) findSeries(tmdbID int32, title string, year int32) (string, int32) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return "", 0
 	}
 	var id string
 	var tid int32
 	if tmdbID != 0 {
-		_ = m.db.QueryRow(`SELECT id, tmdb_id FROM series WHERE tmdb_id = ? LIMIT 1`, tmdbID).Scan(&id, &tid)
+		_ = db.QueryRow(`SELECT id, tmdb_id FROM series WHERE tmdb_id = ? LIMIT 1`, tmdbID).Scan(&id, &tid)
 		if id != "" {
 			return id, tid
 		}
@@ -644,7 +646,7 @@ func (m *Module) findSeries(tmdbID int32, title string, year int32) (string, int
 	if clean == "" {
 		return "", 0
 	}
-	rows, err := m.db.Query(`
+	rows, err := db.Query(`
 		SELECT s.id, s.tmdb_id, s.year FROM series s
 		INNER JOIN series_titles t ON t.series_id = s.id
 		WHERE t.clean_title = ?
@@ -659,21 +661,74 @@ func (m *Module) findSeries(tmdbID int32, title string, year int32) (string, int
 		if err := rows.Scan(&rowID, &rowTMDB, &rowYear); err != nil {
 			continue
 		}
-		if year == 0 || rowYear == 0 || rowYear == year {
-			return rowID, rowTMDB
+		if !yearsCompatible(year, rowYear) {
+			continue
 		}
+		return rowID, rowTMDB
 	}
 	return "", 0
 }
 
+// attachListHasFile marks series that have on-disk episodes so list APIs can expose has_file
+// without loading full season/episode trees (GetTVShow still returns full detail).
+func (m *Module) attachListHasFile(ctx context.Context, db *sql.DB, series []*tvmgmtv1.TVSeries) {
+	if db == nil || len(series) == 0 {
+		return
+	}
+	flags := m.loadSeriesHasFile(ctx, db, series)
+	for _, s := range series {
+		if s == nil || !flags[s.GetId()] {
+			continue
+		}
+		s.Seasons = []*tvmgmtv1.TVSeason{{
+			Id: "_list",
+			Episodes: []*tvmgmtv1.TVEpisode{{
+				Id:      "_list",
+				HasFile: true,
+			}},
+		}}
+	}
+}
+
+func (m *Module) loadSeriesHasFile(ctx context.Context, db *sql.DB, series []*tvmgmtv1.TVSeries) map[string]bool {
+	out := make(map[string]bool, len(series))
+	if len(series) == 0 {
+		return out
+	}
+	placeholders := make([]string, len(series))
+	args := make([]any, len(series))
+	for i, s := range series {
+		placeholders[i] = "?"
+		args[i] = s.GetId()
+	}
+	query := fmt.Sprintf(`
+		SELECT series_id, MAX(has_file) FROM episodes
+		WHERE series_id IN (%s)
+		GROUP BY series_id`, strings.Join(placeholders, ","))
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Debug("load series has_file flags", "error", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var has int
+		if err := rows.Scan(&id, &has); err != nil {
+			continue
+		}
+		out[id] = has > 0
+	}
+	return out
+}
+
 func (m *Module) findEpisodeID(seriesID string, season, episode int32) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return ""
 	}
 	var id string
-	_ = m.db.QueryRow(
+	_ = db.QueryRow(
 		`SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
 		seriesID, season, episode,
 	).Scan(&id)
@@ -681,13 +736,12 @@ func (m *Module) findEpisodeID(seriesID string, season, episode int32) string {
 }
 
 func (m *Module) findEpisodeIDByAbsolute(seriesID string, absolute int32) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil || absolute < 1 {
+	db := m.dbConn()
+	if db == nil || absolute < 1 {
 		return ""
 	}
 	var id string
-	_ = m.db.QueryRow(
+	_ = db.QueryRow(
 		`SELECT id FROM episodes WHERE series_id = ? AND absolute_number = ? LIMIT 1`,
 		seriesID, absolute,
 	).Scan(&id)
@@ -695,13 +749,12 @@ func (m *Module) findEpisodeIDByAbsolute(seriesID string, absolute int32) string
 }
 
 func (m *Module) findEpisodeIDByAirDate(seriesID, airDate string) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil || airDate == "" {
+	db := m.dbConn()
+	if db == nil || airDate == "" {
 		return ""
 	}
 	var id string
-	_ = m.db.QueryRow(
+	_ = db.QueryRow(
 		`SELECT id FROM episodes WHERE series_id = ? AND air_date = ? LIMIT 1`,
 		seriesID, airDate,
 	).Scan(&id)
@@ -712,20 +765,19 @@ func (m *Module) ensureStubEpisode(ctx context.Context, seriesID string, season,
 	if season < 0 || episode < 1 {
 		return ""
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return ""
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	seasonID := fmt.Sprintf("sea_%s_%d", seriesID, season)
-	_, _ = m.db.ExecContext(ctx,
+	_, _ = db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO seasons (id, series_id, season_number, name, monitored, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, 1, ?, ?)`,
 		seasonID, seriesID, season, fmt.Sprintf("Season %d", season), now, now,
 	)
 	episodeID := fmt.Sprintf("ep_%s_%d_%d", seriesID, season, episode)
-	_, err := m.db.ExecContext(ctx,
+	_, err := db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO episodes (id, series_id, season_id, episode_number, season_number, name, monitored, has_file, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
 		episodeID, seriesID, seasonID, episode, season, fmt.Sprintf("Episode %d", episode), now, now,
@@ -734,7 +786,7 @@ func (m *Module) ensureStubEpisode(ctx context.Context, seriesID string, season,
 		return ""
 	}
 	var id string
-	_ = m.db.QueryRow(
+	_ = db.QueryRow(
 		`SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
 		seriesID, season, episode,
 	).Scan(&id)
@@ -1027,17 +1079,16 @@ func (m *Module) getSeriesLocked(ctx context.Context, seriesID string) *tvmgmtv1
 }
 
 func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowRequest) (*tvmgmtv1.RemoveTVShowResponse, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
 	var rootFolder string
-	_ = m.db.QueryRowContext(ctx, `SELECT COALESCE(root_folder_path, '') FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&rootFolder)
+	_ = db.QueryRowContext(ctx, `SELECT COALESCE(root_folder_path, '') FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&rootFolder)
 
 	filePaths := map[string]struct{}{}
-	rows, err := m.db.QueryContext(ctx,
+	rows, err := db.QueryContext(ctx,
 		`SELECT DISTINCT ef.file_path FROM episode_files ef
 		 INNER JOIN episodes e ON e.id = ef.episode_id
 		 WHERE e.series_id = ?`, req.GetSeriesId())
@@ -1058,7 +1109,7 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 	}
 
 	var seriesName string
-	_ = m.db.QueryRowContext(ctx, `SELECT name FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&seriesName)
+	_ = db.QueryRowContext(ctx, `SELECT name FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&seriesName)
 	m.appendHistory(ctx, historyEntry{
 		EventType: historyDeleteItem,
 		ItemID:    req.GetSeriesId(),
@@ -1066,23 +1117,23 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 		Data:      map[string]any{"delete_files": req.GetDeleteFiles()},
 	})
 
-	_, err = m.db.ExecContext(ctx,
+	_, err = db.ExecContext(ctx,
 		`DELETE FROM episode_files WHERE episode_id IN (SELECT id FROM episodes WHERE series_id = ?)`,
 		req.GetSeriesId())
 	if err != nil {
 		return nil, fmt.Errorf("delete episode files: %w", err)
 	}
-	_, _ = m.db.ExecContext(ctx, `DELETE FROM item_tags WHERE item_id = ?`, req.GetSeriesId())
-	_, _ = m.db.ExecContext(ctx, `DELETE FROM series_titles WHERE series_id = ?`, req.GetSeriesId())
-	_, err = m.db.ExecContext(ctx, `DELETE FROM episodes WHERE series_id = ?`, req.GetSeriesId())
+	_, _ = db.ExecContext(ctx, `DELETE FROM item_tags WHERE item_id = ?`, req.GetSeriesId())
+	_, _ = db.ExecContext(ctx, `DELETE FROM series_titles WHERE series_id = ?`, req.GetSeriesId())
+	_, err = db.ExecContext(ctx, `DELETE FROM episodes WHERE series_id = ?`, req.GetSeriesId())
 	if err != nil {
 		return nil, fmt.Errorf("delete episodes: %w", err)
 	}
-	_, err = m.db.ExecContext(ctx, `DELETE FROM seasons WHERE series_id = ?`, req.GetSeriesId())
+	_, err = db.ExecContext(ctx, `DELETE FROM seasons WHERE series_id = ?`, req.GetSeriesId())
 	if err != nil {
 		return nil, fmt.Errorf("delete seasons: %w", err)
 	}
-	_, err = m.db.ExecContext(ctx, `DELETE FROM series WHERE id = ?`, req.GetSeriesId())
+	_, err = db.ExecContext(ctx, `DELETE FROM series WHERE id = ?`, req.GetSeriesId())
 	if err != nil {
 		return nil, fmt.Errorf("delete series: %w", err)
 	}
@@ -1097,11 +1148,13 @@ func (m *Module) RemoveTVShow(ctx context.Context, req *tvmgmtv1.RemoveTVShowReq
 }
 
 func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetadataRequest) (*tvmgmtv1.RefreshMetadataResponse, error) {
-	m.mu.RLock()
+	db := m.dbConn()
+	if db == nil {
+		return nil, fmt.Errorf("not initialized")
+	}
 	var tmdbID int32
 	var seriesName string
-	m.db.QueryRowContext(ctx, `SELECT tmdb_id, name FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&tmdbID, &seriesName)
-	m.mu.RUnlock()
+	db.QueryRowContext(ctx, `SELECT tmdb_id, name FROM series WHERE id = ?`, req.GetSeriesId()).Scan(&tmdbID, &seriesName)
 
 	if tmdbID == 0 {
 		return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
@@ -1138,8 +1191,7 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 		backdropSrc = details.GetBackdropPath()
 	}
 
-	m.mu.Lock()
-	_, err = m.db.ExecContext(ctx,
+	_, err = db.ExecContext(ctx,
 		`UPDATE series SET name=?, original_name=?, year=?, overview=?, tagline=?, status=?, first_air_date=?, last_air_date=?, vote_average=?, genres=?, poster_path=?, backdrop_path=?, total_seasons=?, total_episodes=?, updated_at=? WHERE id=?`,
 		details.GetName(), details.GetOriginalName(), extractYear(details.GetFirstAirDate()),
 		details.GetOverview(), details.GetTagline(), details.GetStatus(),
@@ -1152,7 +1204,6 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 	if err == nil {
 		m.syncSeriesPrimaryTitlesLocked(ctx, req.GetSeriesId(), details.GetName(), details.GetOriginalName())
 	}
-	m.mu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("update series: %w", err)
 	}
@@ -1173,8 +1224,10 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 }
 
 func (m *Module) populateSeasonsFromDB(ctx context.Context, seriesID string, details *metadatav1.GetTVDetailsResponse) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	db := m.dbConn()
+	if db == nil {
+		return
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, s := range details.GetSeasons() {
@@ -1182,7 +1235,7 @@ func (m *Module) populateSeasonsFromDB(ctx context.Context, seriesID string, det
 			continue
 		}
 		seasonID := fmt.Sprintf("sea_%s_%d", seriesID, s.GetSeasonNumber())
-		_, err := m.db.ExecContext(ctx,
+		_, err := db.ExecContext(ctx,
 			`INSERT OR IGNORE INTO seasons (id, series_id, season_number, name, overview, episode_count, air_date, poster_path, monitored, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET name=excluded.name, overview=excluded.overview, episode_count=excluded.episode_count, air_date=excluded.air_date, poster_path=excluded.poster_path, updated_at=excluded.updated_at`,
@@ -1214,12 +1267,14 @@ func (m *Module) populateEpisodesFromMetadata(ctx context.Context, metaClient me
 }
 
 func (m *Module) populateEpisodesFromSeason(ctx context.Context, seriesID, seasonID string, seasonNumber int32, episodes []*metadatav1.Episode) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	db := m.dbConn()
+	if db == nil {
+		return
+	}
 
 	monitored := 1
 	var mon int
-	if err := m.db.QueryRowContext(ctx, `SELECT monitored FROM seasons WHERE id = ?`, seasonID).Scan(&mon); err == nil {
+	if err := db.QueryRowContext(ctx, `SELECT monitored FROM seasons WHERE id = ?`, seasonID).Scan(&mon); err == nil {
 		monitored = mon
 	}
 
@@ -1233,7 +1288,7 @@ func (m *Module) populateEpisodesFromSeason(ctx context.Context, seriesID, seaso
 			sn = seasonNumber
 		}
 		episodeID := fmt.Sprintf("ep_%s_%d_%d", seriesID, sn, e.GetEpisodeNumber())
-		_, err := m.db.ExecContext(ctx,
+		_, err := db.ExecContext(ctx,
 			`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, name, overview, air_date, still_path, monitored, has_file, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET tmdb_id=excluded.tmdb_id, name=excluded.name, overview=excluded.overview, air_date=excluded.air_date, still_path=excluded.still_path, season_id=excluded.season_id, updated_at=excluded.updated_at`,
@@ -1248,12 +1303,11 @@ func (m *Module) populateEpisodesFromSeason(ctx context.Context, seriesID, seaso
 }
 
 func (m *Module) renumberAbsoluteEpisodes(ctx context.Context, seriesID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return
 	}
-	rows, err := m.db.QueryContext(ctx,
+	rows, err := db.QueryContext(ctx,
 		`SELECT id FROM episodes WHERE series_id = ? AND season_number > 0
 		 ORDER BY season_number ASC, episode_number ASC`,
 		seriesID,
@@ -1274,9 +1328,9 @@ func (m *Module) renumberAbsoluteEpisodes(ctx context.Context, seriesID string) 
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	for i, id := range ids {
-		_, _ = m.db.ExecContext(ctx, `UPDATE episodes SET absolute_number = ?, updated_at = ? WHERE id = ?`, i+1, now, id)
+		_, _ = db.ExecContext(ctx, `UPDATE episodes SET absolute_number = ?, updated_at = ? WHERE id = ?`, i+1, now, id)
 	}
-	_, _ = m.db.ExecContext(ctx, `UPDATE episodes SET absolute_number = 0, updated_at = ? WHERE series_id = ? AND season_number <= 0`, now, seriesID)
+	_, _ = db.ExecContext(ctx, `UPDATE episodes SET absolute_number = 0, updated_at = ? WHERE series_id = ? AND season_number <= 0`, now, seriesID)
 }
 
 func extractYear(dateStr string) int32 {
@@ -1317,9 +1371,8 @@ func (m *Module) populateSeasonsFromMetadata(ctx context.Context, seriesID strin
 }
 
 func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsRequest) (*tvmgmtv1.ListTVShowsResponse, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
@@ -1362,7 +1415,7 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	}
 
 	var total int
-	m.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
 
 	sortBy := req.GetSortBy()
 	if sortBy == "" {
@@ -1382,7 +1435,7 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	query += fmt.Sprintf(` ORDER BY %s %s LIMIT ? OFFSET ?`, sortBy, sortOrder)
 	queryArgs := append(args, pageSize, offset)
 
-	rows, err := m.db.QueryContext(ctx, query, queryArgs...)
+	rows, err := db.QueryContext(ctx, query, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query series: %w", err)
 	}
@@ -1396,6 +1449,8 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 		}
 	}
 
+	m.attachListHasFile(ctx, db, seriesList)
+
 	return &tvmgmtv1.ListTVShowsResponse{
 		Series:   seriesList,
 		Total:    int32(total),
@@ -1405,9 +1460,8 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 }
 
 func (m *Module) ListMissing(ctx context.Context, req *tvmgmtv1.ListMissingRequest) (*tvmgmtv1.ListMissingResponse, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
@@ -1430,7 +1484,7 @@ func (m *Module) ListMissing(ctx context.Context, req *tvmgmtv1.ListMissingReque
 
 	countQuery := `SELECT COUNT(*) FROM episodes e ` + where
 	var total int
-	if err := m.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count missing episodes: %w", err)
 	}
 
@@ -1443,7 +1497,7 @@ func (m *Module) ListMissing(ctx context.Context, req *tvmgmtv1.ListMissingReque
 		LIMIT ? OFFSET ?`
 	qargs := append(args, pageSize, offset)
 
-	rows, err := m.db.QueryContext(ctx, query, qargs...)
+	rows, err := db.QueryContext(ctx, query, qargs...)
 	if err != nil {
 		return nil, fmt.Errorf("query missing episodes: %w", err)
 	}
@@ -1473,13 +1527,12 @@ func (m *Module) ListMissing(ctx context.Context, req *tvmgmtv1.ListMissingReque
 }
 
 func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) (*tvmgmtv1.GetTVShowResponse, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
-	row := m.db.QueryRowContext(ctx,
+	row := db.QueryRowContext(ctx,
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
@@ -1492,7 +1545,7 @@ func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) 
 		return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
 	}
 
-	seasons, err := m.loadSeasons(ctx, series.GetId())
+	seasons, err := m.loadSeasons(ctx, db, series.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("load seasons: %w", err)
 	}
@@ -1502,7 +1555,8 @@ func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) 
 }
 
 func (m *Module) LookupEpisode(ctx context.Context, req *tvmgmtv1.LookupEpisodeRequest) (*tvmgmtv1.LookupEpisodeResponse, error) {
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
@@ -1511,11 +1565,8 @@ func (m *Module) LookupEpisode(ctx context.Context, req *tvmgmtv1.LookupEpisodeR
 		return &tvmgmtv1.LookupEpisodeResponse{Found: false}, nil
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	var seriesName, originalName string
-	_ = m.db.QueryRowContext(ctx,
+	_ = db.QueryRowContext(ctx,
 		`SELECT name, original_name FROM series WHERE id = ?`, seriesID,
 	).Scan(&seriesName, &originalName)
 
@@ -1533,7 +1584,7 @@ func (m *Module) LookupEpisode(ctx context.Context, req *tvmgmtv1.LookupEpisodeR
 
 	resolveOne := func(season, episode int32) (epRow, bool) {
 		var r epRow
-		err := m.db.QueryRowContext(ctx,
+		err := db.QueryRowContext(ctx,
 			`SELECT id, name, air_date, season_number, episode_number, absolute_number
 			 FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ? LIMIT 1`,
 			seriesID, season, episode,
@@ -1554,7 +1605,7 @@ func (m *Module) LookupEpisode(ctx context.Context, req *tvmgmtv1.LookupEpisodeR
 		}
 	case req.GetAbsoluteNumber() > 0:
 		var r epRow
-		err := m.db.QueryRowContext(ctx,
+		err := db.QueryRowContext(ctx,
 			`SELECT id, name, air_date, season_number, episode_number, absolute_number
 			 FROM episodes WHERE series_id = ? AND absolute_number = ? LIMIT 1`,
 			seriesID, req.GetAbsoluteNumber(),
@@ -1564,7 +1615,7 @@ func (m *Module) LookupEpisode(ctx context.Context, req *tvmgmtv1.LookupEpisodeR
 		}
 	case req.GetAirDate() != "":
 		var r epRow
-		err := m.db.QueryRowContext(ctx,
+		err := db.QueryRowContext(ctx,
 			`SELECT id, name, air_date, season_number, episode_number, absolute_number
 			 FROM episodes WHERE series_id = ? AND air_date = ? LIMIT 1`,
 			seriesID, req.GetAirDate(),
@@ -1659,9 +1710,8 @@ func (m *Module) UpdateSeasonMonitored(ctx context.Context, req *tvmgmtv1.Update
 // ── File Management ────────────────────────────────────────────
 
 func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFileRequest) (*tvmgmtv1.AddEpisodeFileResponse, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
@@ -1680,19 +1730,19 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 		id := fmt.Sprintf("ef_%d", time.Now().UnixNano())
 		if firstFileID == "" {
 			firstFileID = id
-			_ = m.db.QueryRowContext(ctx,
+			_ = db.QueryRowContext(ctx,
 				`SELECT e.series_id, s.name FROM episodes e INNER JOIN series s ON s.id = e.series_id WHERE e.id = ?`,
 				episodeID,
 			).Scan(&seriesID, &seriesName)
 		}
-		_, err := m.db.ExecContext(ctx,
+		_, err := db.ExecContext(ctx,
 			`INSERT INTO episode_files (id, episode_id, file_path, quality, size_bytes, container, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			id, episodeID, req.GetFilePath(), req.GetQuality(), req.GetSizeBytes(), req.GetContainer(), now,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert episode file: %w", err)
 		}
-		m.db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, episodeID)
+		db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, episodeID)
 
 		epID := episodeID
 		fileID := id
@@ -1818,8 +1868,8 @@ func (m *Module) RemoveEpisodeFile(ctx context.Context, req *tvmgmtv1.RemoveEpis
 
 // ── Season/Episode loading helpers ─────────────────────────────
 
-func (m *Module) loadSeasons(ctx context.Context, seriesID string) ([]*tvmgmtv1.TVSeason, error) {
-	rows, err := m.db.QueryContext(ctx,
+func (m *Module) loadSeasons(ctx context.Context, db *sql.DB, seriesID string) ([]*tvmgmtv1.TVSeason, error) {
+	rows, err := db.QueryContext(ctx,
 		`SELECT id, series_id, season_number, name, overview, episode_count,
 		 air_date, poster_path, monitored, created_at, updated_at
 		 FROM seasons WHERE series_id = ? ORDER BY season_number`,
@@ -1831,22 +1881,48 @@ func (m *Module) loadSeasons(ctx context.Context, seriesID string) ([]*tvmgmtv1.
 	defer rows.Close()
 
 	var seasons []*tvmgmtv1.TVSeason
+	byID := make(map[string]*tvmgmtv1.TVSeason)
 	for rows.Next() {
 		s := m.scanSeason(rows)
-		if s != nil {
-			episodes, err := m.loadEpisodes(ctx, s.GetId())
-			if err != nil {
-				return nil, fmt.Errorf("load episodes for season %s: %w", s.GetId(), err)
-			}
-			s.Episodes = episodes
-			seasons = append(seasons, s)
+		if s == nil {
+			continue
 		}
+		s.Episodes = []*tvmgmtv1.TVEpisode{}
+		seasons = append(seasons, s)
+		byID[s.GetId()] = s
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	epRows, err := db.QueryContext(ctx,
+		`SELECT id, series_id, season_id, tmdb_id, episode_number, season_number,
+		 absolute_number, name, overview, air_date, still_path, monitored, has_file,
+		 created_at, updated_at
+		 FROM episodes WHERE series_id = ? ORDER BY season_number, episode_number`,
+		seriesID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer epRows.Close()
+	for epRows.Next() {
+		ep := m.scanEpisode(epRows)
+		if ep == nil {
+			continue
+		}
+		if season, ok := byID[ep.GetSeasonId()]; ok {
+			season.Episodes = append(season.Episodes, ep)
+		}
+	}
+	if err := epRows.Err(); err != nil {
+		return nil, err
 	}
 	return seasons, nil
 }
 
-func (m *Module) loadEpisodes(ctx context.Context, seasonID string) ([]*tvmgmtv1.TVEpisode, error) {
-	rows, err := m.db.QueryContext(ctx,
+func (m *Module) loadEpisodes(ctx context.Context, db *sql.DB, seasonID string) ([]*tvmgmtv1.TVEpisode, error) {
+	rows, err := db.QueryContext(ctx,
 		`SELECT id, series_id, season_id, tmdb_id, episode_number, season_number,
 		 absolute_number, name, overview, air_date, still_path, monitored, has_file,
 		 created_at, updated_at
@@ -2028,9 +2104,8 @@ func (m *Module) GetMediaTypeInfo(ctx context.Context, req *mediaadminv1.GetMedi
 }
 
 func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsRequest) (*mediaadminv1.ListItemsResponse, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
@@ -2079,12 +2154,12 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	}
 
 	var total int
-	m.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
 
 	query += fmt.Sprintf(` ORDER BY %s %s LIMIT ? OFFSET ?`, sortBy, sortOrder)
 	qargs := append(args, pageSize, offset)
 
-	rows, err := m.db.QueryContext(ctx, query, qargs...)
+	rows, err := db.QueryContext(ctx, query, qargs...)
 	if err != nil {
 		return nil, fmt.Errorf("query items: %w", err)
 	}
@@ -2107,13 +2182,12 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 }
 
 func (m *Module) GetItem(ctx context.Context, req *mediaadminv1.GetItemRequest) (*mediaadminv1.GetItemResponse, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.db == nil {
+	db := m.dbConn()
+	if db == nil {
 		return nil, fmt.Errorf("not initialized")
 	}
 
-	row := m.db.QueryRowContext(ctx,
+	row := db.QueryRowContext(ctx,
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,

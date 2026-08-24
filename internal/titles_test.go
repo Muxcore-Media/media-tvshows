@@ -29,6 +29,14 @@ func TestSplitTitleYear(t *testing.T) {
 	if title != "Game of Thrones" || year != 2011 {
 		t.Fatalf("kept year: title=%q year=%d", title, year)
 	}
+	title, year = splitTitleYear("paddington bear 1989", 0)
+	if title != "paddington bear" || year != 1989 {
+		t.Fatalf("bare year: got title=%q year=%d", title, year)
+	}
+	title, year = splitTitleYear("Franklin 2024", 0)
+	if title != "Franklin" || year != 2024 {
+		t.Fatalf("reboot year: got title=%q year=%d", title, year)
+	}
 }
 
 func TestFindSeriesByAlternateTitles(t *testing.T) {

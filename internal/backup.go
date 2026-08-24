@@ -41,7 +41,7 @@ func (m *Module) ImportState(ctx context.Context, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("reopen sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(sqliteMaxOpenConns)
 	m.db = db
 	return nil
 }
