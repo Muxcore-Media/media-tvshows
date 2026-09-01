@@ -1538,6 +1538,11 @@ type TVEpisode struct {
 	HasFile        bool                   `protobuf:"varint,13,opt,name=has_file,json=hasFile,proto3" json:"has_file,omitempty"`
 	CreatedAt      string                 `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      string                 `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	FileId         string                 `protobuf:"bytes,16,opt,name=file_id,json=fileId,proto3" json:"file_id,omitempty"`
+	FilePath       string                 `protobuf:"bytes,17,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
+	Quality        string                 `protobuf:"bytes,18,opt,name=quality,proto3" json:"quality,omitempty"`
+	SizeBytes      int64                  `protobuf:"varint,19,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Container      string                 `protobuf:"bytes,20,opt,name=container,proto3" json:"container,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1673,6 +1678,41 @@ func (x *TVEpisode) GetCreatedAt() string {
 func (x *TVEpisode) GetUpdatedAt() string {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *TVEpisode) GetFileId() string {
+	if x != nil {
+		return x.FileId
+	}
+	return ""
+}
+
+func (x *TVEpisode) GetFilePath() string {
+	if x != nil {
+		return x.FilePath
+	}
+	return ""
+}
+
+func (x *TVEpisode) GetQuality() string {
+	if x != nil {
+		return x.Quality
+	}
+	return ""
+}
+
+func (x *TVEpisode) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *TVEpisode) GetContainer() string {
+	if x != nil {
+		return x.Container
 	}
 	return ""
 }
@@ -3207,7 +3247,7 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\v \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\f \x01(\tR\tupdatedAt\"\xc4\x03\n" +
+	"updated_at\x18\f \x01(\tR\tupdatedAt\"\xd1\x04\n" +
 	"\tTVEpisode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tseries_id\x18\x02 \x01(\tR\bseriesId\x12\x1b\n" +
@@ -3227,7 +3267,13 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x0e \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x0f \x01(\tR\tupdatedAt\"\xcb\x01\n" +
+	"updated_at\x18\x0f \x01(\tR\tupdatedAt\x12\x17\n" +
+	"\afile_id\x18\x10 \x01(\tR\x06fileId\x12\x1b\n" +
+	"\tfile_path\x18\x11 \x01(\tR\bfilePath\x12\x18\n" +
+	"\aquality\x18\x12 \x01(\tR\aquality\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x13 \x01(\x03R\tsizeBytes\x12\x1c\n" +
+	"\tcontainer\x18\x14 \x01(\tR\tcontainer\"\xcb\x01\n" +
 	"\x15AddEpisodeFileRequest\x12\x1d\n" +
 	"\n" +
 	"episode_id\x18\x01 \x01(\tR\tepisodeId\x12\x1b\n" +

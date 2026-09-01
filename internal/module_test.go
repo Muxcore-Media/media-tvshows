@@ -40,13 +40,16 @@ func newTestModule(t *testing.T) *Module {
 }
 
 func TestModuleInfo(t *testing.T) {
-	m := NewModule(Config{})
+	m := NewModule(Config{GRPCAddr: ":9440", HTTPAddr: ":9450"})
 	info := m.Info()
 	if info.ID == "" {
 		t.Error("module ID must not be empty")
 	}
 	if info.Version == "" {
 		t.Error("module version must not be empty")
+	}
+	if info.HTTPAddr != ":9450" {
+		t.Errorf("HTTPAddr: got %q want :9450", info.HTTPAddr)
 	}
 	caps := map[string]bool{}
 	for _, c := range info.Capabilities {
@@ -189,7 +192,11 @@ func TestGetMediaTypeInfo(t *testing.T) {
 	if len(info.FilterFields) == 0 {
 		t.Error("expected filter fields")
 	}
-	want := map[string]bool{"missing": true, "tags": true, "calendar": true}
+	want := map[mediaadminv1.Feature]bool{
+		mediaadminv1.Feature_FEATURE_MISSING:  true,
+		mediaadminv1.Feature_FEATURE_TAGS:     true,
+		mediaadminv1.Feature_FEATURE_CALENDAR: true,
+	}
 	for _, f := range info.Features {
 		delete(want, f)
 	}
@@ -293,8 +300,8 @@ func TestListArtwork(t *testing.T) {
 	if len(resp.Artwork) != 2 {
 		t.Fatalf("expected 2 artwork entries, got %d", len(resp.Artwork))
 	}
-	if resp.Artwork[0].Type != "poster" {
-		t.Errorf("expected first artwork type 'poster', got %s", resp.Artwork[0].Type)
+	if resp.Artwork[0].Type != mediaadminv1.ArtworkType_ARTWORK_TYPE_POSTER {
+		t.Errorf("expected first artwork type poster, got %v", resp.Artwork[0].Type)
 	}
 	if !strings.Contains(resp.Artwork[0].Url, "/images/"+relPoster) {
 		t.Errorf("unexpected poster url: %s", resp.Artwork[0].Url)
@@ -783,7 +790,7 @@ func TestReplaceArtwork(t *testing.T) {
 		ctx: ctx,
 		msgs: []*mediaadminv1.ReplaceArtworkRequest{
 			{Data: &mediaadminv1.ReplaceArtworkRequest_ItemId{ItemId: add.SeriesId}},
-			{Data: &mediaadminv1.ReplaceArtworkRequest_ArtworkType{ArtworkType: "poster"}},
+			{Data: &mediaadminv1.ReplaceArtworkRequest_ArtworkType{ArtworkType: mediaadminv1.ArtworkType_ARTWORK_TYPE_POSTER}},
 			{Data: &mediaadminv1.ReplaceArtworkRequest_Filename{Filename: "custom.png"}},
 			{Data: &mediaadminv1.ReplaceArtworkRequest_Chunk{Chunk: []byte{0x89, 0x50, 0x4e, 0x47}}},
 		},
@@ -1425,5 +1432,120 @@ func TestGetTVShowLoadsManyEpisodes(t *testing.T) {
 	if len(get.Series.Seasons) != 1 || len(get.Series.Seasons[0].Episodes) != 200 {
 		t.Fatalf("expected 1 season with 200 episodes, got %d seasons / %d eps",
 			len(get.Series.Seasons), len(get.Series.Seasons[0].Episodes))
+	}
+}
+
+func TestListItemsFiltersAndHasFileMetadata(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+	now := "2020-01-01T00:00:00Z"
+
+	m.mu.Lock()
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO series (id, tmdb_id, name, year, status, network, genres, monitored, created_at, updated_at)
+		 VALUES ('s_hbo', 1, 'HBO Show', 2020, 'Ended', 'HBO', '["Drama"]', 1, ?, ?)`, now, now)
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO series (id, tmdb_id, name, year, status, network, genres, monitored, created_at, updated_at)
+		 VALUES ('s_empty', 2, 'Empty Show', 2019, 'Continuing', 'Netflix', '["Comedy"]', 1, ?, ?)`, now, now)
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
+		 VALUES ('se_hbo', 's_hbo', 1, 1, ?, ?)`, now, now)
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, monitored, has_file, created_at, updated_at)
+		 VALUES ('ep_hbo', 's_hbo', 'se_hbo', 1, 1, 1, 1, ?, ?)`, now, now)
+	m.mu.Unlock()
+
+	byNetwork, err := m.ListItems(ctx, &mediaadminv1.ListItemsRequest{
+		Page: 1, PageSize: 20,
+		Filters: map[string]string{"network": "HBO"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byNetwork.Total != 1 || byNetwork.Items[0].GetId() != "s_hbo" {
+		t.Fatalf("network filter: %+v", byNetwork)
+	}
+
+	withFile, err := m.ListItems(ctx, &mediaadminv1.ListItemsRequest{
+		Page: 1, PageSize: 20,
+		Filters: map[string]string{"has_file": "true"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withFile.Total != 1 {
+		t.Fatalf("has_file=true filter: total=%d", withFile.Total)
+	}
+	if withFile.Items[0].GetMetadata()["has_file"] != "true" {
+		t.Fatalf("metadata has_file: %+v", withFile.Items[0].GetMetadata())
+	}
+}
+
+func TestListItemsSortByRatingAndUnknownSort(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+	now := "2020-01-01T00:00:00Z"
+
+	m.mu.Lock()
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO series (id, tmdb_id, name, year, vote_average, monitored, created_at, updated_at)
+		 VALUES ('s_low', 1, 'Alpha', 2020, 5.0, 1, ?, ?)`, now, now)
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO series (id, tmdb_id, name, year, vote_average, monitored, created_at, updated_at)
+		 VALUES ('s_high', 2, 'Beta', 2020, 9.0, 1, ?, ?)`, now, now)
+	m.mu.Unlock()
+
+	rated, err := m.ListItems(ctx, &mediaadminv1.ListItemsRequest{
+		Page: 1, PageSize: 20, SortBy: mediaadminv1.SortField_SORT_FIELD_RATING, SortOrder: "desc",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rated.Items) != 2 || rated.Items[0].GetId() != "s_high" {
+		t.Fatalf("rating sort: %+v", rated.Items)
+	}
+
+	if _, err := m.ListItems(ctx, &mediaadminv1.ListItemsRequest{
+		Page: 1, PageSize: 20, SortBy: mediaadminv1.SortField(999),
+	}); err != nil {
+		t.Fatalf("unknown sort_by should fall back safely, got error: %v", err)
+	}
+}
+
+func TestNetworkFromTVDetails(t *testing.T) {
+	got := networkFromTVDetails([]*metadatav1.Network{
+		nil,
+		{Name: "  "},
+		{Name: " HBO "},
+	})
+	if got != "HBO" {
+		t.Fatalf("got %q want HBO", got)
+	}
+}
+
+func TestRefreshMetadataNetworkPersisted(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+	now := "2020-01-01T00:00:00Z"
+
+	m.mu.Lock()
+	_, err := m.db.ExecContext(ctx,
+		`INSERT INTO series (id, tmdb_id, name, year, network, monitored, created_at, updated_at)
+		 VALUES ('s_net', 100, 'Net Show', 2020, '', 1, ?, ?)`, now, now)
+	m.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	network := networkFromTVDetails([]*metadatav1.Network{{Name: "AMC"}})
+	_, err = m.db.ExecContext(ctx, `UPDATE series SET network = ? WHERE id = 's_net'`, network)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stored string
+	_ = m.db.QueryRowContext(ctx, `SELECT network FROM series WHERE id = 's_net'`).Scan(&stored)
+	if stored != "AMC" {
+		t.Fatalf("network not persisted: %q", stored)
 	}
 }

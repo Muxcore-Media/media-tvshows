@@ -8,7 +8,7 @@ MuxCore sidecar module (`media-tvshows`). Workspace deploy and SSH: [`../AGENTS.
 |-------|-------|
 | Directory | `media-tvshows` |
 | Capabilities | see muxcore.json |
-| Contracts | none declared |
+| Contracts | `MediaAdminService` (contracts-media-admin v0.1.0) |
 
 ## Agent rules
 

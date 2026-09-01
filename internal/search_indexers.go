@@ -16,12 +16,23 @@ import (
 
 const capMediaAutomation = "media.automation"
 
+type indexerSearchContext struct {
+	title            string
+	year             int32
+	tmdbID           int32
+	qualityProfileID string
+	season           int32
+	episode          int32
+	absolute         int32
+	seriesType       string
+}
+
 func (m *Module) SearchIndexers(ctx context.Context, req *mediaadminv1.SearchIndexersRequest) (*mediaadminv1.SearchIndexersResponse, error) {
 	if req.GetItemId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "item_id required")
 	}
 
-	title, year, tmdbID, qualityProfileID, err := m.lookupSeriesForIndexerSearch(ctx, req.GetItemId())
+	searchCtx, err := m.lookupItemForIndexerSearch(ctx, req.GetItemId())
 	if err != nil {
 		return nil, err
 	}
@@ -33,13 +44,15 @@ func (m *Module) SearchIndexers(ctx context.Context, req *mediaadminv1.SearchInd
 
 	searchResp, err := m.automationSearchItem(ctx, &automationv1.SearchItemRequest{
 		ItemType:         "tv",
-		Query:            title,
-		TmdbId:           tmdbID,
-		Year:             year,
-		Season:           0,
-		Episode:          0,
+		Query:            searchCtx.title,
+		TmdbId:           searchCtx.tmdbID,
+		Year:             searchCtx.year,
+		Season:           searchCtx.season,
+		Episode:          searchCtx.episode,
+		Absolute:         searchCtx.absolute,
+		SeriesType:       searchCtx.seriesType,
 		Limit:            limit,
-		QualityProfileId: qualityProfileID,
+		QualityProfileId: searchCtx.qualityProfileID,
 	})
 	if err != nil {
 		return emptySearchIndexersResponse(), nil
@@ -52,20 +65,38 @@ func (m *Module) SearchIndexers(ctx context.Context, req *mediaadminv1.SearchInd
 	}, nil
 }
 
-func (m *Module) lookupSeriesForIndexerSearch(ctx context.Context, itemID string) (title string, year, tmdbID int32, qualityProfileID string, err error) {
+func (m *Module) lookupItemForIndexerSearch(ctx context.Context, itemID string) (indexerSearchContext, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.db == nil {
-		return "", 0, 0, "", fmt.Errorf("not initialized")
+		return indexerSearchContext{}, fmt.Errorf("not initialized")
 	}
+
+	var out indexerSearchContext
 	var y, tmdb int64
-	err = m.db.QueryRowContext(ctx,
-		`SELECT name, year, tmdb_id, quality_profile_id FROM series WHERE id = ?`, itemID,
-	).Scan(&title, &y, &tmdb, &qualityProfileID)
-	if err != nil {
-		return "", 0, 0, "", status.Errorf(codes.NotFound, "series not found: %s", itemID)
+	err := m.db.QueryRowContext(ctx,
+		`SELECT name, year, tmdb_id, quality_profile_id, COALESCE(series_type, 'standard') FROM series WHERE id = ?`, itemID,
+	).Scan(&out.title, &y, &tmdb, &out.qualityProfileID, &out.seriesType)
+	if err == nil {
+		out.year = int32(y)
+		out.tmdbID = int32(tmdb)
+		return out, nil
 	}
-	return title, int32(y), int32(tmdb), qualityProfileID, nil
+
+	err = m.db.QueryRowContext(ctx,
+		`SELECT s.name, s.year, s.tmdb_id, s.quality_profile_id, COALESCE(s.series_type, 'standard'),
+		        e.season_number, e.episode_number, e.absolute_number
+		 FROM episodes e
+		 INNER JOIN series s ON s.id = e.series_id
+		 WHERE e.id = ?`, itemID,
+	).Scan(&out.title, &y, &tmdb, &out.qualityProfileID, &out.seriesType,
+		&out.season, &out.episode, &out.absolute)
+	if err != nil {
+		return indexerSearchContext{}, status.Errorf(codes.NotFound, "item not found: %s", itemID)
+	}
+	out.year = int32(y)
+	out.tmdbID = int32(tmdb)
+	return out, nil
 }
 
 func (m *Module) automationSearchItem(ctx context.Context, req *automationv1.SearchItemRequest) (*automationv1.SearchItemResponse, error) {

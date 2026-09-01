@@ -6,6 +6,22 @@ import (
 	"strings"
 )
 
+func isFileUnderRoot(filePath, rootFolder string) bool {
+	if filePath == "" {
+		return false
+	}
+	cleaned := filepath.Clean(filePath)
+	if !filepath.IsAbs(cleaned) {
+		return false
+	}
+	root := filepath.Clean(rootFolder)
+	if root == "" || root == "." {
+		return false
+	}
+	sep := string(os.PathSeparator)
+	return cleaned == root || strings.HasPrefix(cleaned, root+sep)
+}
+
 func safeDeleteMediaFile(filePath, rootFolder string) error {
 	if filePath == "" {
 		return nil
@@ -18,8 +34,7 @@ func safeDeleteMediaFile(filePath, rootFolder string) error {
 	if root == "" || root == "." {
 		return nil
 	}
-	sep := string(os.PathSeparator)
-	if cleaned != root && !strings.HasPrefix(cleaned, root+sep) {
+	if !isFileUnderRoot(cleaned, root) {
 		return nil
 	}
 	if err := os.Remove(cleaned); err != nil && !os.IsNotExist(err) {

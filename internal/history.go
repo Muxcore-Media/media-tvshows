@@ -11,6 +11,7 @@ import (
 
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
 	"github.com/Muxcore-Media/core/pkg/contracts"
+	"github.com/Muxcore-Media/core/sdk/go/client"
 )
 
 const (
@@ -86,26 +87,23 @@ func (m *Module) appendHistory(ctx context.Context, e historyEntry) {
 }
 
 func (m *Module) subscribeToDownloadDispatched() {
-	time.Sleep(15 * time.Second)
-	if m.mc == nil {
-		return
-	}
-	ch, cancel, err := m.mc.Events.Subscribe(context.Background(), contracts.EventDownloadDispatched)
-	if err != nil {
-		slog.Warn("subscribe to download dispatched events", "error", err)
-		return
-	}
-	go func() {
-		for evt := range ch {
-			var p contracts.DownloadDispatchedPayload
-			if err := json.Unmarshal(evt.Payload, &p); err != nil {
-				continue
-			}
-			m.handleDownloadDispatched(context.Background(), p)
+	m.subscribeWhenMeshReady(contracts.EventDownloadDispatched, func(c *client.Client) error {
+		ch, cancel, err := c.Events.Subscribe(context.Background(), contracts.EventDownloadDispatched)
+		if err != nil {
+			return err
 		}
-		cancel()
-	}()
-	slog.Info("subscribed to download dispatched events")
+		go func() {
+			for evt := range ch {
+				var p contracts.DownloadDispatchedPayload
+				if err := json.Unmarshal(evt.Payload, &p); err != nil {
+					continue
+				}
+				m.handleDownloadDispatched(context.Background(), p)
+			}
+			cancel()
+		}()
+		return nil
+	})
 }
 
 func (m *Module) resolveSeriesIDForGrab(ctx context.Context, db *sql.DB, p contracts.DownloadDispatchedPayload) (seriesID, title string) {
@@ -202,9 +200,11 @@ func (m *Module) ListHistory(ctx context.Context, req *mediaadminv1.ListHistoryR
 		where = append(where, "item_id = ?")
 		args = append(args, req.GetItemId())
 	}
-	if req.GetEventType() != "" {
-		where = append(where, "event_type = ?")
-		args = append(args, req.GetEventType())
+	if req.GetEventType() != mediaadminv1.HistoryEventType_HISTORY_EVENT_TYPE_UNSPECIFIED {
+		if dbType := historyEventTypeToDB(req.GetEventType()); dbType != "" {
+			where = append(where, "event_type = ?")
+			args = append(args, dbType)
+		}
 	}
 	clause := strings.Join(where, " AND ")
 
@@ -228,12 +228,14 @@ func (m *Module) ListHistory(ctx context.Context, req *mediaadminv1.ListHistoryR
 	var records []*mediaadminv1.HistoryRecord
 	for rows.Next() {
 		var r mediaadminv1.HistoryRecord
+		var eventTypeDB string
 		if err := rows.Scan(
-			&r.Id, &r.EventType, &r.ItemId, &r.Title, &r.SourceTitle,
+			&r.Id, &eventTypeDB, &r.ItemId, &r.Title, &r.SourceTitle,
 			&r.Quality, &r.Indexer, &r.FilePath, &r.DownloadId, &r.CreatedAt,
 		); err != nil {
 			continue
 		}
+		r.EventType = historyEventTypeFromDB(eventTypeDB)
 		records = append(records, &r)
 	}
 

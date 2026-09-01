@@ -42,6 +42,10 @@ func (m *Module) ImportState(ctx context.Context, data []byte) error {
 		return fmt.Errorf("reopen sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(sqliteMaxOpenConns)
+	if err := m.configureDatabase(ctx, db); err != nil {
+		_ = db.Close()
+		return err
+	}
 	m.db = db
 	return nil
 }

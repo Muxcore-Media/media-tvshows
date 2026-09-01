@@ -116,3 +116,49 @@ func TestSearchIndexersUsesAutomationStub(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(resp.GetResults()))
 	}
 }
+
+func TestSearchIndexersEpisodeUsesSeasonEpisode(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+
+	add, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{
+		TmdbId: 1399,
+		Name:   "Game of Thrones",
+		Year:   2011,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := "2020-01-01T00:00:00Z"
+	m.mu.Lock()
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO seasons (id, series_id, season_number, monitored, created_at, updated_at)
+		 VALUES ('sea_ep', ?, 1, 1, ?, ?)`, add.SeriesId, now, now)
+	_, _ = m.db.ExecContext(ctx,
+		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, absolute_number, monitored, has_file, created_at, updated_at)
+		 VALUES ('ep_idx', ?, 'sea_ep', 3, 1, 3, 1, 0, ?, ?)`, add.SeriesId, now, now)
+	_, _ = m.db.ExecContext(ctx, `UPDATE series SET series_type = 'standard' WHERE id = ?`, add.SeriesId)
+	m.mu.Unlock()
+
+	var captured *automationv1.SearchItemRequest
+	m.automationSearchFn = func(ctx context.Context, req *automationv1.SearchItemRequest) (*automationv1.SearchItemResponse, error) {
+		captured = req
+		return &automationv1.SearchItemResponse{}, nil
+	}
+
+	if _, err := m.SearchIndexers(ctx, &mediaadminv1.SearchIndexersRequest{ItemId: "ep_idx"}); err != nil {
+		t.Fatal(err)
+	}
+	if captured == nil {
+		t.Fatal("expected automation SearchItem to be called")
+	}
+	if captured.GetSeason() != 1 || captured.GetEpisode() != 3 {
+		t.Errorf("expected season=1 episode=3, got season=%d episode=%d", captured.GetSeason(), captured.GetEpisode())
+	}
+	if captured.GetAbsolute() != 3 {
+		t.Errorf("absolute: got %d want 3", captured.GetAbsolute())
+	}
+	if captured.GetSeriesType() != "standard" {
+		t.Errorf("series_type: got %q", captured.GetSeriesType())
+	}
+}

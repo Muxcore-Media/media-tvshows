@@ -193,6 +193,11 @@ message TVEpisode {
   bool has_file = 13;
   string created_at = 14;
   string updated_at = 15;
+  string file_id = 16;
+  string file_path = 17;
+  string quality = 18;
+  int64 size_bytes = 19;
+  string container = 20;
 }
 
 message AddEpisodeFileRequest {

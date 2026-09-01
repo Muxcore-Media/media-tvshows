@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -73,9 +74,26 @@ func extFromFilenameOrMIME(filename, contentType string) string {
 	}
 }
 
+func clientReachableHTTPHost(httpAddr string) string {
+	if httpAddr == "" {
+		return "127.0.0.1"
+	}
+	host, port, err := net.SplitHostPort(httpAddr)
+	if err != nil {
+		if strings.HasPrefix(httpAddr, ":") {
+			return "127.0.0.1" + httpAddr
+		}
+		return httpAddr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
+}
+
 func artworkURL(httpAddr, relPath string) string {
 	relPath = strings.TrimPrefix(filepath.ToSlash(relPath), "/")
-	return fmt.Sprintf("http://%s/images/%s", httpAddr, relPath)
+	return fmt.Sprintf("http://%s/images/%s", clientReachableHTTPHost(httpAddr), relPath)
 }
 
 func (m *Module) localArtworkExists(relPath string) bool {
@@ -235,13 +253,13 @@ func (m *Module) buildArtworkInfos(itemID, poster, backdrop string) []*mediaadmi
 	if m.localArtworkExists(poster) {
 		artwork = append(artwork, &mediaadminv1.ArtworkInfo{
 			Id: itemID + "_poster", ItemId: itemID,
-			Type: "poster", Url: artworkURL(m.httpAddr, poster),
+			Type: artworkKindToProtoType("poster"), Url: artworkURL(m.httpAddr, poster),
 		})
 	}
 	if m.localArtworkExists(backdrop) {
 		artwork = append(artwork, &mediaadminv1.ArtworkInfo{
 			Id: itemID + "_backdrop", ItemId: itemID,
-			Type: "background", Url: artworkURL(m.httpAddr, backdrop),
+			Type: artworkKindToProtoType("background"), Url: artworkURL(m.httpAddr, backdrop),
 		})
 	}
 	return artwork
@@ -253,7 +271,7 @@ func (m *Module) buildEpisodeStillInfo(episodeID, still string) []*mediaadminv1.
 	}
 	return []*mediaadminv1.ArtworkInfo{{
 		Id: episodeID + "_still", ItemId: episodeID,
-		Type: "still", Url: artworkURL(m.httpAddr, still),
+		Type: artworkKindToProtoType("still"), Url: artworkURL(m.httpAddr, still),
 	}}
 }
 

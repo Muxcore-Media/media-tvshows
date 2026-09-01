@@ -36,14 +36,14 @@ func TestHistoryImportDeleteAndList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hist.Total != 1 || hist.Records[0].EventType != historyImport {
-		t.Fatalf("expected 1 import, got total=%d type=%v", hist.Total, hist.Records)
+	if hist.Total != 1 || hist.Records[0].EventType != mediaadminv1.HistoryEventType_HISTORY_EVENT_TYPE_IMPORT {
+		t.Fatalf("expected 1 import, got total=%d type=%v", hist.Total, hist.Records[0].GetEventType())
 	}
 
 	if _, err := m.RemoveEpisodeFile(ctx, &tvmgmtv1.RemoveEpisodeFileRequest{FileId: fileResp.FileId}); err != nil {
 		t.Fatal(err)
 	}
-	hist, err = m.ListHistory(ctx, &mediaadminv1.ListHistoryRequest{Page: 1, PageSize: 20, ItemId: "s1", EventType: historyDeleteFile})
+	hist, err = m.ListHistory(ctx, &mediaadminv1.ListHistoryRequest{Page: 1, PageSize: 20, ItemId: "s1", EventType: mediaadminv1.HistoryEventType_HISTORY_EVENT_TYPE_DELETE_FILE})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestHistoryImportDeleteAndList(t *testing.T) {
 	if _, err := m.RemoveTVShow(ctx, &tvmgmtv1.RemoveTVShowRequest{SeriesId: "s1"}); err != nil {
 		t.Fatal(err)
 	}
-	hist, err = m.ListHistory(ctx, &mediaadminv1.ListHistoryRequest{Page: 1, PageSize: 20, EventType: historyDeleteItem})
+	hist, err = m.ListHistory(ctx, &mediaadminv1.ListHistoryRequest{Page: 1, PageSize: 20, EventType: mediaadminv1.HistoryEventType_HISTORY_EVENT_TYPE_DELETE_ITEM})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestHistoryGrabFromDownloadDispatched(t *testing.T) {
 		Title: "Show.S01", ItemType: "tv", ItemID: "s1:S1:pack", SeriesID: "s1", Indexer: "pack-idx",
 	})
 
-	hist, err := m.ListHistory(ctx, &mediaadminv1.ListHistoryRequest{Page: 1, PageSize: 20, EventType: historyGrab})
+	hist, err := m.ListHistory(ctx, &mediaadminv1.ListHistoryRequest{Page: 1, PageSize: 20, EventType: mediaadminv1.HistoryEventType_HISTORY_EVENT_TYPE_GRAB})
 	if err != nil {
 		t.Fatal(err)
 	}
