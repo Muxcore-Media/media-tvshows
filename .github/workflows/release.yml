@@ -9,25 +9,25 @@ jobs:
   release:
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v7
+      - uses: Muxcore-Media/mvp/.github/actions/checkout-mirror@main
         with:
-          path: core
-          repository: Muxcore-Media/core
-      - uses: actions/checkout@v7
-        with:
-          path: contracts-media-admin
-          repository: Muxcore-Media/contracts-media-admin
-      - uses: actions/checkout@v7
-        with:
-          path: media-root-folders
-          repository: Muxcore-Media/media-root-folders
-      - uses: actions/checkout@v7
-        with:
-          path: metadata-tmdb
-          repository: Muxcore-Media/metadata-tmdb
-      - uses: actions/checkout@v7
-        with:
-          path: media-tvshows
+          token: ${{ secrets.MUXCORE_CI_TOKEN || github.token }}
+      - name: Checkout dependencies
+        env:
+          TOKEN: ${{ secrets.MUXCORE_CI_TOKEN || github.token }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/Muxcore-Media/core.git" core
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/Muxcore-Media/contracts-media-admin.git" contracts-media-admin
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/Muxcore-Media/media-root-folders.git" media-root-folders
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/Muxcore-Media/metadata-tmdb.git" metadata-tmdb
+      - name: Prepare workspace layout
+        run: |
+          mkdir -p media-tvshows
+          shopt -s dotglob
+          for item in *; do
+            case "$item" in core|contracts-media-admin|media-root-folders|metadata-tmdb|media-tvshows) continue ;; esac
+            mv "$item" media-tvshows/
+          done
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
