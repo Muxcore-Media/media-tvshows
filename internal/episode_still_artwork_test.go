@@ -41,8 +41,8 @@ func TestEpisodeStillListArtwork(t *testing.T) {
 	if len(resp.Artwork) != 1 {
 		t.Fatalf("expected 1 still, got %d", len(resp.Artwork))
 	}
-	if resp.Artwork[0].Type != "still" {
-		t.Fatalf("expected still, got %s", resp.Artwork[0].Type)
+	if resp.Artwork[0].Type != mediaadminv1.ArtworkType_ARTWORK_TYPE_STILL {
+		t.Fatalf("expected still, got %v", resp.Artwork[0].Type)
 	}
 	if !strings.Contains(resp.Artwork[0].Url, "/images/"+relStill) {
 		t.Fatalf("unexpected url %s", resp.Artwork[0].Url)
