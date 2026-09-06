@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/Muxcore-Media/contracts-automation v0.1.0
-	github.com/Muxcore-Media/contracts-media-admin v0.1.0
+	github.com/Muxcore-Media/contracts-media-admin v0.1.1-0.20260905225357-350de7622545
 	github.com/Muxcore-Media/contracts-metadata v0.1.0
 	github.com/Muxcore-Media/core v0.5.8
 	github.com/Muxcore-Media/core/pkg/contracts v0.5.8
@@ -36,8 +36,6 @@ require (
 replace github.com/Muxcore-Media/contracts-scanner => ../contracts-scanner
 
 replace github.com/Muxcore-Media/contracts-automation => ../contracts-automation
-
-replace github.com/Muxcore-Media/contracts-media-admin => ../contracts-media-admin
 
 replace github.com/Muxcore-Media/contracts-metadata => ../contracts-metadata
 

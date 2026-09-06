@@ -116,7 +116,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 			{
 				Repo:      "github.com/Muxcore-Media/contracts-media-admin",
 				Interface: "MediaAdminService",
-				Version:   "v0.1.0",
+				Version:   "v0.1.1",
 			},
 		},
 		MinCoreVersion: "0.4.0",
@@ -2073,18 +2073,39 @@ func (m *Module) scanEpisode(rows *sql.Rows) *tvmgmtv1.TVEpisode {
 
 // ── MediaAdminService (admin-ui contract) ─────────────────────
 
+func adminSortFieldToColumn(field mediaadminv1.SortField) string {
+	switch field {
+	case mediaadminv1.SortField_SORT_FIELD_YEAR:
+		return "year"
+	case mediaadminv1.SortField_SORT_FIELD_CREATED_AT:
+		return "created_at"
+	case mediaadminv1.SortField_SORT_FIELD_UPDATED_AT:
+		return "updated_at"
+	case mediaadminv1.SortField_SORT_FIELD_RATING:
+		return "vote_average"
+	case mediaadminv1.SortField_SORT_FIELD_TITLE:
+		return "name"
+	default:
+		return "name"
+	}
+}
+
 func (m *Module) GetMediaTypeInfo(ctx context.Context, req *mediaadminv1.GetMediaTypeInfoRequest) (*mediaadminv1.GetMediaTypeInfoResponse, error) {
 	return &mediaadminv1.GetMediaTypeInfoResponse{
 		DisplayName: "TV Shows",
 		Icon:        "📺",
 		FilterFields: []*mediaadminv1.FilterField{
-			{Key: "genre", Label: "Genre", Type: "text"},
-			{Key: "year", Label: "Year", Type: "number"},
-			{Key: "status", Label: "Status", Type: "text"},
-			{Key: "network", Label: "Network", Type: "text"},
-			{Key: "has_file", Label: "Has File", Type: "select", Options: []string{"true", "false"}},
+			{Key: "genre", Label: "Genre", Type: mediaadminv1.FilterFieldType_FILTER_FIELD_TYPE_TEXT},
+			{Key: "year", Label: "Year", Type: mediaadminv1.FilterFieldType_FILTER_FIELD_TYPE_NUMBER},
+			{Key: "status", Label: "Status", Type: mediaadminv1.FilterFieldType_FILTER_FIELD_TYPE_TEXT},
+			{Key: "network", Label: "Network", Type: mediaadminv1.FilterFieldType_FILTER_FIELD_TYPE_TEXT},
+			{Key: "has_file", Label: "Has File", Type: mediaadminv1.FilterFieldType_FILTER_FIELD_TYPE_SELECT, Options: []string{"true", "false"}},
 		},
-		Features: []string{"missing", "tags", "calendar"},
+		Features: []mediaadminv1.Feature{
+			mediaadminv1.Feature_FEATURE_MISSING,
+			mediaadminv1.Feature_FEATURE_TAGS,
+			mediaadminv1.Feature_FEATURE_CALENDAR,
+		},
 	}, nil
 }
 
@@ -2123,10 +2144,7 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 		args = append(args, req.GetTagId())
 	}
 
-	sortBy := req.GetSortBy()
-	if sortBy == "" {
-		sortBy = "name"
-	}
+	sortBy := adminSortFieldToColumn(req.GetSortBy())
 	sortOrder := req.GetSortOrder()
 	if sortOrder != "desc" {
 		sortOrder = "asc"
@@ -2332,7 +2350,8 @@ func (m *Module) RefreshItem(ctx context.Context, req *mediaadminv1.RefreshItemR
 
 func (m *Module) ReplaceArtwork(stream mediaadminv1.MediaAdminService_ReplaceArtworkServer) error {
 	ctx := stream.Context()
-	var itemID, artworkType, filename string
+	var itemID, filename string
+	var artworkType mediaadminv1.ArtworkType
 	var buf []byte
 
 	for {
@@ -2346,7 +2365,7 @@ func (m *Module) ReplaceArtwork(stream mediaadminv1.MediaAdminService_ReplaceArt
 		switch {
 		case msg.GetItemId() != "":
 			itemID = msg.GetItemId()
-		case msg.GetArtworkType() != "":
+		case msg.GetArtworkType() != mediaadminv1.ArtworkType_ARTWORK_TYPE_UNSPECIFIED:
 			artworkType = msg.GetArtworkType()
 		case msg.GetFilename() != "":
 			filename = msg.GetFilename()
@@ -2365,7 +2384,7 @@ func (m *Module) ReplaceArtwork(stream mediaadminv1.MediaAdminService_ReplaceArt
 	if itemID == "" {
 		return status.Error(codes.InvalidArgument, "item_id required")
 	}
-	kind, err := normalizeArtworkKind(artworkType)
+	kind, err := artworkKindFromType(artworkType)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -2399,17 +2418,15 @@ func (m *Module) ReplaceArtwork(stream mediaadminv1.MediaAdminService_ReplaceArt
 		return stream.SendAndClose(&mediaadminv1.ReplaceArtworkResponse{
 			Artwork: &mediaadminv1.ArtworkInfo{
 				Id: itemID + "_still", ItemId: itemID,
-				Type: "still", Url: artworkURL(m.httpAddr, relPath),
+				Type: mediaadminv1.ArtworkType_ARTWORK_TYPE_STILL, Url: artworkURL(m.httpAddr, relPath),
 				MimeType: mime,
 			},
 		})
 	}
 
 	col := "poster_path"
-	artType := "poster"
 	if kind == "backdrop" {
 		col = "backdrop_path"
-		artType = "background"
 	}
 	m.mu.Lock()
 	_, err = m.db.ExecContext(ctx,
@@ -2424,7 +2441,7 @@ func (m *Module) ReplaceArtwork(stream mediaadminv1.MediaAdminService_ReplaceArt
 	return stream.SendAndClose(&mediaadminv1.ReplaceArtworkResponse{
 		Artwork: &mediaadminv1.ArtworkInfo{
 			Id: itemID + "_" + kind, ItemId: itemID,
-			Type: artType, Url: artworkURL(m.httpAddr, relPath),
+			Type: artworkTypeForKind(kind), Url: artworkURL(m.httpAddr, relPath),
 			MimeType: mime,
 		},
 	})

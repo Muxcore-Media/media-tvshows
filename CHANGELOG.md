@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.14] — 2026-09-06
+
+### Fixed
+- Bump `contracts-media-admin` to Feature enum generation so tip admin-ui Unified Wanted and calendar gates recognize TV `FEATURE_MISSING`, `FEATURE_TAGS`, and `FEATURE_CALENDAR` (umbrella #124).
+
 ## [0.1.13] — 2026-08-20
 
 ### Added

@@ -189,7 +189,11 @@ func TestGetMediaTypeInfo(t *testing.T) {
 	if len(info.FilterFields) == 0 {
 		t.Error("expected filter fields")
 	}
-	want := map[string]bool{"missing": true, "tags": true, "calendar": true}
+	want := map[mediaadminv1.Feature]bool{
+		mediaadminv1.Feature_FEATURE_MISSING:  true,
+		mediaadminv1.Feature_FEATURE_TAGS:     true,
+		mediaadminv1.Feature_FEATURE_CALENDAR: true,
+	}
 	for _, f := range info.Features {
 		delete(want, f)
 	}
@@ -293,8 +297,8 @@ func TestListArtwork(t *testing.T) {
 	if len(resp.Artwork) != 2 {
 		t.Fatalf("expected 2 artwork entries, got %d", len(resp.Artwork))
 	}
-	if resp.Artwork[0].Type != "poster" {
-		t.Errorf("expected first artwork type 'poster', got %s", resp.Artwork[0].Type)
+	if resp.Artwork[0].Type != mediaadminv1.ArtworkType_ARTWORK_TYPE_POSTER {
+		t.Errorf("expected first artwork type poster, got %v", resp.Artwork[0].Type)
 	}
 	if !strings.Contains(resp.Artwork[0].Url, "/images/"+relPoster) {
 		t.Errorf("unexpected poster url: %s", resp.Artwork[0].Url)
@@ -783,7 +787,7 @@ func TestReplaceArtwork(t *testing.T) {
 		ctx: ctx,
 		msgs: []*mediaadminv1.ReplaceArtworkRequest{
 			{Data: &mediaadminv1.ReplaceArtworkRequest_ItemId{ItemId: add.SeriesId}},
-			{Data: &mediaadminv1.ReplaceArtworkRequest_ArtworkType{ArtworkType: "poster"}},
+			{Data: &mediaadminv1.ReplaceArtworkRequest_ArtworkType{ArtworkType: mediaadminv1.ArtworkType_ARTWORK_TYPE_POSTER}},
 			{Data: &mediaadminv1.ReplaceArtworkRequest_Filename{Filename: "custom.png"}},
 			{Data: &mediaadminv1.ReplaceArtworkRequest_Chunk{Chunk: []byte{0x89, 0x50, 0x4e, 0x47}}},
 		},

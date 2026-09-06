@@ -10,7 +10,7 @@
 
 | Contract | Interface | Version | Status |
 |----------|-----------|---------|--------|
-| contracts-media-admin | MediaAdminService | v0.1.0 | Implemented |
+| contracts-media-admin | MediaAdminService | v0.1.1+ | Implemented |
 
 ## Breaking Changes
 
