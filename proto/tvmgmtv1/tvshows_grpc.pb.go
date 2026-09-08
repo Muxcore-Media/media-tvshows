@@ -34,6 +34,7 @@ const (
 	TvManagementService_DeleteTag_FullMethodName              = "/muxcore.media.tv.v1.TvManagementService/DeleteTag"
 	TvManagementService_ListTags_FullMethodName               = "/muxcore.media.tv.v1.TvManagementService/ListTags"
 	TvManagementService_SetItemTags_FullMethodName            = "/muxcore.media.tv.v1.TvManagementService/SetItemTags"
+	TvManagementService_GetItemTags_FullMethodName            = "/muxcore.media.tv.v1.TvManagementService/GetItemTags"
 	TvManagementService_GetCalendar_FullMethodName            = "/muxcore.media.tv.v1.TvManagementService/GetCalendar"
 	TvManagementService_ListAlternateTitles_FullMethodName    = "/muxcore.media.tv.v1.TvManagementService/ListAlternateTitles"
 	TvManagementService_AddAlternateTitle_FullMethodName      = "/muxcore.media.tv.v1.TvManagementService/AddAlternateTitle"
@@ -60,6 +61,7 @@ type TvManagementServiceClient interface {
 	DeleteTag(ctx context.Context, in *DeleteTagRequest, opts ...grpc.CallOption) (*DeleteTagResponse, error)
 	ListTags(ctx context.Context, in *ListTagsRequest, opts ...grpc.CallOption) (*ListTagsResponse, error)
 	SetItemTags(ctx context.Context, in *SetItemTagsRequest, opts ...grpc.CallOption) (*SetItemTagsResponse, error)
+	GetItemTags(ctx context.Context, in *GetItemTagsRequest, opts ...grpc.CallOption) (*GetItemTagsResponse, error)
 	GetCalendar(ctx context.Context, in *GetCalendarRequest, opts ...grpc.CallOption) (*GetCalendarResponse, error)
 	ListAlternateTitles(ctx context.Context, in *ListAlternateTitlesRequest, opts ...grpc.CallOption) (*ListAlternateTitlesResponse, error)
 	AddAlternateTitle(ctx context.Context, in *AddAlternateTitleRequest, opts ...grpc.CallOption) (*AddAlternateTitleResponse, error)
@@ -225,6 +227,16 @@ func (c *tvManagementServiceClient) SetItemTags(ctx context.Context, in *SetItem
 	return out, nil
 }
 
+func (c *tvManagementServiceClient) GetItemTags(ctx context.Context, in *GetItemTagsRequest, opts ...grpc.CallOption) (*GetItemTagsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetItemTagsResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_GetItemTags_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *tvManagementServiceClient) GetCalendar(ctx context.Context, in *GetCalendarRequest, opts ...grpc.CallOption) (*GetCalendarResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCalendarResponse)
@@ -294,6 +306,7 @@ type TvManagementServiceServer interface {
 	DeleteTag(context.Context, *DeleteTagRequest) (*DeleteTagResponse, error)
 	ListTags(context.Context, *ListTagsRequest) (*ListTagsResponse, error)
 	SetItemTags(context.Context, *SetItemTagsRequest) (*SetItemTagsResponse, error)
+	GetItemTags(context.Context, *GetItemTagsRequest) (*GetItemTagsResponse, error)
 	GetCalendar(context.Context, *GetCalendarRequest) (*GetCalendarResponse, error)
 	ListAlternateTitles(context.Context, *ListAlternateTitlesRequest) (*ListAlternateTitlesResponse, error)
 	AddAlternateTitle(context.Context, *AddAlternateTitleRequest) (*AddAlternateTitleResponse, error)
@@ -353,6 +366,9 @@ func (UnimplementedTvManagementServiceServer) ListTags(context.Context, *ListTag
 }
 func (UnimplementedTvManagementServiceServer) SetItemTags(context.Context, *SetItemTagsRequest) (*SetItemTagsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetItemTags not implemented")
+}
+func (UnimplementedTvManagementServiceServer) GetItemTags(context.Context, *GetItemTagsRequest) (*GetItemTagsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetItemTags not implemented")
 }
 func (UnimplementedTvManagementServiceServer) GetCalendar(context.Context, *GetCalendarRequest) (*GetCalendarResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCalendar not implemented")
@@ -660,6 +676,24 @@ func _TvManagementService_SetItemTags_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TvManagementService_GetItemTags_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetItemTagsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).GetItemTags(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_GetItemTags_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).GetItemTags(ctx, req.(*GetItemTagsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _TvManagementService_GetCalendar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetCalendarRequest)
 	if err := dec(in); err != nil {
@@ -816,6 +850,10 @@ var TvManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetItemTags",
 			Handler:    _TvManagementService_SetItemTags_Handler,
+		},
+		{
+			MethodName: "GetItemTags",
+			Handler:    _TvManagementService_GetItemTags_Handler,
 		},
 		{
 			MethodName: "GetCalendar",

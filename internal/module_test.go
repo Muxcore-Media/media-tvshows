@@ -1173,6 +1173,13 @@ func TestTagsAndCalendar(t *testing.T) {
 	if list.Total != 1 {
 		t.Fatalf("tag filter total=%d", list.Total)
 	}
+	got, err := m.GetItemTags(ctx, &tvmgmtv1.GetItemTagsRequest{ItemId: add.SeriesId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tags) != 1 || got.Tags[0].Id != tag.TagId || got.Tags[0].Label != "anime" {
+		t.Fatalf("item tags: %+v", got.Tags)
+	}
 
 	m.mu.Lock()
 	_, _ = m.db.ExecContext(ctx,

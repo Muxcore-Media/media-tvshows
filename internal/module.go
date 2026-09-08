@@ -343,6 +343,7 @@ func (m *Module) Start(ctx context.Context) error {
 		http.StripPrefix("/images/", http.FileServer(http.Dir(m.getImageDir()))).ServeHTTP(w, r)
 	})
 	mux.HandleFunc("/stream/tv/", m.handleStreamEpisode)
+	mux.HandleFunc("GET /api/episodes/", m.handleEpisodeFileJSON)
 	m.httpSrv = &http.Server{Handler: mux}
 
 	go func() {
@@ -2479,43 +2480,36 @@ func (m *Module) seriesToMediaItem(s *tvmgmtv1.TVSeries) *mediaadminv1.MediaItem
 	}
 }
 
-// handleStreamEpisode serves an episode file for browser playback.
-// Path: GET /stream/tv/{episode_id}
-func (m *Module) handleStreamEpisode(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/stream/tv/"), "/")
+func episodeIDFromPath(path, prefix string) string {
+	id := strings.Trim(strings.TrimPrefix(path, prefix), "/")
 	if decoded, err := url.PathUnescape(id); err == nil {
 		id = decoded
 	}
+	id = strings.TrimSuffix(id, "/file")
 	if id == "" || strings.Contains(id, "/") {
-		http.NotFound(w, r)
-		return
+		return ""
 	}
+	return id
+}
 
+func (m *Module) lookupEpisodeFile(ctx context.Context, episodeID string) (filePath, fileID, quality string, ok bool) {
 	m.mu.RLock()
 	db := m.db
 	m.mu.RUnlock()
-	if db == nil {
-		http.Error(w, "not initialized", http.StatusServiceUnavailable)
-		return
+	if db == nil || episodeID == "" {
+		return "", "", "", false
 	}
-
-	var filePath string
-	err := db.QueryRowContext(r.Context(),
-		`SELECT file_path FROM episode_files WHERE episode_id = ? ORDER BY created_at LIMIT 1`, id,
-	).Scan(&filePath)
+	err := db.QueryRowContext(ctx,
+		`SELECT id, file_path, COALESCE(quality, '') FROM episode_files WHERE episode_id = ? ORDER BY created_at LIMIT 1`, episodeID,
+	).Scan(&fileID, &filePath, &quality)
 	if err != nil {
-		http.NotFound(w, r)
-		return
+		return "", "", "", false
 	}
 	if filePath != "" && !filepath.IsAbs(filePath) {
 		var root string
-		_ = db.QueryRowContext(r.Context(),
+		_ = db.QueryRowContext(ctx,
 			`SELECT COALESCE(s.root_folder_path, '') FROM episodes e
-			 INNER JOIN series s ON s.id = e.series_id WHERE e.id = ?`, id,
+			 INNER JOIN series s ON s.id = e.series_id WHERE e.id = ?`, episodeID,
 		).Scan(&root)
 		if root != "" {
 			rel := strings.TrimPrefix(filepath.ToSlash(filePath), "media/")
@@ -2525,7 +2519,49 @@ func (m *Module) handleStreamEpisode(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if filePath == "" || !filepath.IsAbs(filePath) {
+	if filePath == "" {
+		return "", "", "", false
+	}
+	return filePath, fileID, quality, true
+}
+
+// handleEpisodeFileJSON returns the on-disk path for an episode so mediauiprox
+// can probe sidecar subtitles and chapters without a GetMedia RPC.
+func (m *Module) handleEpisodeFileJSON(w http.ResponseWriter, r *http.Request) {
+	id := episodeIDFromPath(r.URL.Path, "/api/episodes/")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	filePath, fileID, quality, ok := m.lookupEpisodeFile(r.Context(), id)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"id":        id,
+		"file_id":   fileID,
+		"file_path": filePath,
+		"quality":   quality,
+	})
+}
+
+// handleStreamEpisode serves an episode file for browser playback.
+// Path: GET /stream/tv/{episode_id}
+func (m *Module) handleStreamEpisode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := episodeIDFromPath(r.URL.Path, "/stream/tv/")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	filePath, _, _, ok := m.lookupEpisodeFile(r.Context(), id)
+	if !ok || !filepath.IsAbs(filePath) {
 		http.NotFound(w, r)
 		return
 	}
