@@ -18,6 +18,7 @@ service TvManagementService {
   rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc SetItemTags(SetItemTagsRequest) returns (SetItemTagsResponse);
+  rpc GetItemTags(GetItemTagsRequest) returns (GetItemTagsResponse);
   rpc GetCalendar(GetCalendarRequest) returns (GetCalendarResponse);
   rpc ListAlternateTitles(ListAlternateTitlesRequest) returns (ListAlternateTitlesResponse);
   rpc AddAlternateTitle(AddAlternateTitleRequest) returns (AddAlternateTitleResponse);
@@ -248,6 +249,14 @@ message SetItemTagsRequest {
 }
 
 message SetItemTagsResponse {}
+
+message GetItemTagsRequest {
+  string item_id = 1;
+}
+
+message GetItemTagsResponse {
+  repeated Tag tags = 1;
+}
 
 message GetCalendarRequest {
   string start_date = 1; // YYYY-MM-DD

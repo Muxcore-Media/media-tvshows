@@ -93,6 +93,38 @@ func (m *Module) SetItemTags(ctx context.Context, req *tvmgmtv1.SetItemTagsReque
 	return &tvmgmtv1.SetItemTagsResponse{}, nil
 }
 
+func (m *Module) GetItemTags(ctx context.Context, req *tvmgmtv1.GetItemTagsRequest) (*tvmgmtv1.GetItemTagsResponse, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.db == nil {
+		return nil, fmt.Errorf("not initialized")
+	}
+	if req.GetItemId() == "" {
+		return nil, fmt.Errorf("item_id required")
+	}
+	var exists string
+	if err := m.db.QueryRowContext(ctx, `SELECT id FROM series WHERE id = ?`, req.GetItemId()).Scan(&exists); err != nil || exists == "" {
+		return nil, fmt.Errorf("series not found: %s", req.GetItemId())
+	}
+	rows, err := m.db.QueryContext(ctx,
+		`SELECT t.id, t.label, t.created_at FROM tags t
+		 INNER JOIN item_tags it ON it.tag_id = t.id
+		 WHERE it.item_id = ? ORDER BY t.label`, req.GetItemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var tags []*tvmgmtv1.Tag
+	for rows.Next() {
+		var id, label, created string
+		if err := rows.Scan(&id, &label, &created); err != nil {
+			return nil, err
+		}
+		tags = append(tags, &tvmgmtv1.Tag{Id: id, Label: label, CreatedAt: created})
+	}
+	return &tvmgmtv1.GetItemTagsResponse{Tags: tags}, nil
+}
+
 func (m *Module) GetCalendar(ctx context.Context, req *tvmgmtv1.GetCalendarRequest) (*tvmgmtv1.GetCalendarResponse, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
