@@ -29,6 +29,7 @@ import (
 	"github.com/Muxcore-Media/core/sdk/go/client"
 	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
 	rootsv1 "github.com/Muxcore-Media/media-root-folders/proto/rootsv1"
+	manifest "github.com/Muxcore-Media/media-tvshows"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 	_ "modernc.org/sqlite"
 )
@@ -107,7 +108,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Media TV Shows",
-		Version:      "0.1.13",
+		Version:      modulesdk.ManifestVersion(manifest.ManifestJSON),
 		Roles:        []string{"media_manager"},
 		Description:  "TV show library manager with TMDB metadata import and admin UI integration",
 		Author:       "MuxCore",
