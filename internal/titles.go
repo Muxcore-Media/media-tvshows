@@ -10,10 +10,8 @@ import (
 	"time"
 	"unicode"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
+	"github.com/Muxcore-Media/core/sdk/go/module/meshtls"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 )
 
@@ -217,7 +215,7 @@ func (m *Module) fetchSeriesAlternativeTitles(ctx context.Context, tmdbID int32)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := grpc.NewClient(metaAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := meshtls.Dial(metaAddr)
 	if err != nil {
 		return nil, err
 	}
