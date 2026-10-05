@@ -101,6 +101,62 @@ func TestAddAndGetTVShow(t *testing.T) {
 	}
 }
 
+func TestContentRatingRoundTrip(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+
+	add, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{
+		TmdbId:        1396,
+		Name:          "Breaking Bad",
+		Year:          2008,
+		Genres:        []string{"Drama", "Crime"},
+		ContentRating: "TV-MA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	get, err := m.GetTVShow(ctx, &tvmgmtv1.GetTVShowRequest{SeriesId: add.SeriesId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if get.GetSeries().GetContentRating() != "TV-MA" {
+		t.Fatalf("content_rating = %q", get.GetSeries().GetContentRating())
+	}
+	list, err := m.ListTVShows(ctx, &tvmgmtv1.ListTVShowsRequest{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, series := range list.GetSeries() {
+		if series.GetId() == add.SeriesId {
+			found = true
+			if series.GetContentRating() != "TV-MA" {
+				t.Fatalf("list content_rating = %q", series.GetContentRating())
+			}
+		}
+	}
+	if !found {
+		t.Fatal("added series missing from list")
+	}
+
+	if _, err := m.UpdateMetadata(ctx, &mediaadminv1.UpdateMetadataRequest{
+		Id:    add.SeriesId,
+		Title: "Breaking Bad",
+		Metadata: map[string]string{
+			"content_rating": "TV-14",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	get, err = m.GetTVShow(ctx, &tvmgmtv1.GetTVShowRequest{SeriesId: add.SeriesId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if get.GetSeries().GetContentRating() != "TV-14" {
+		t.Fatalf("updated content_rating = %q", get.GetSeries().GetContentRating())
+	}
+}
+
 func TestAddDuplicateTMDBID(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()

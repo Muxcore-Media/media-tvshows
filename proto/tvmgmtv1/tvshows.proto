@@ -37,6 +37,8 @@ message AddTVShowRequest {
   string quality_profile_id = 8;
   string root_folder_path = 9;
   string series_type = 10; // "standard", "daily", or "anime"
+  // Certification such as TV-PG or TV-MA. Empty means unknown (parental ceiling stays fail-open).
+  string content_rating = 11;
 }
 
 message AddTVShowResponse {
@@ -161,6 +163,8 @@ message TVSeries {
   string quality_profile_id = 24;
   string root_folder_path = 25;
   string series_type = 26; // "standard", "daily", or "anime"
+  // Certification such as TV-PG or TV-MA. Empty means unknown.
+  string content_rating = 27;
 }
 
 message TVSeason {

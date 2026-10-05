@@ -185,6 +185,7 @@ func (m *Module) Init(ctx context.Context) error {
 		`ALTER TABLE series ADD COLUMN quality_profile_id TEXT DEFAULT ''`,
 		`ALTER TABLE series ADD COLUMN root_folder_path TEXT DEFAULT ''`,
 		`ALTER TABLE series ADD COLUMN series_type TEXT DEFAULT 'standard'`,
+		`ALTER TABLE series ADD COLUMN content_rating TEXT DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(ctx, col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			_ = db.Close()
@@ -941,11 +942,11 @@ func (m *Module) AddTVShow(ctx context.Context, req *tvmgmtv1.AddTVShowRequest) 
 	}
 
 	_, err = m.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO series (id, tmdb_id, name, year, overview, poster_path, backdrop_path, genres, monitored, quality_profile_id, root_folder_path, series_type, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+		`INSERT OR IGNORE INTO series (id, tmdb_id, name, year, overview, poster_path, backdrop_path, genres, monitored, quality_profile_id, root_folder_path, series_type, content_rating, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
 		id, req.GetTmdbId(), req.GetName(), req.GetYear(),
 		req.GetOverview(), req.GetPosterPath(), req.GetBackdropPath(),
-		string(genresJSON), req.GetQualityProfileId(), rootPath, seriesType, now, now,
+		string(genresJSON), req.GetQualityProfileId(), rootPath, seriesType, strings.TrimSpace(req.GetContentRating()), now, now,
 	)
 	if err != nil {
 		m.mu.Unlock()
@@ -1087,7 +1088,7 @@ func (m *Module) getSeriesLocked(ctx context.Context, seriesID string) *tvmgmtv1
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at, content_rating FROM series WHERE id = ?`,
 		seriesID,
 	)
 	return m.scanSingleSeries(row)
@@ -1404,7 +1405,7 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	query := `SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		status, network, first_air_date, last_air_date, vote_average, genres,
 		poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series`
+		quality_profile_id, root_folder_path, series_type, created_at, updated_at, content_rating FROM series`
 	countQuery := `SELECT COUNT(*) FROM series`
 
 	var args []any
@@ -1553,7 +1554,7 @@ func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) 
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at, content_rating FROM series WHERE id = ?`,
 		req.GetSeriesId(),
 	)
 
@@ -1951,7 +1952,7 @@ func (m *Module) loadSeasons(ctx context.Context, db *sql.DB, seriesID string) (
 // ── Scan helpers ───────────────────────────────────────────────
 
 func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, contentRating string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -1959,7 +1960,7 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 	err := rows.Scan(&id, &tmdbID, &name, &originalName, &year, &overview, &tagline,
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
-		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt)
+		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt, &contentRating)
 	if err != nil {
 		slog.Error("scan series row", "error", err)
 		return nil
@@ -1994,11 +1995,12 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 		QualityProfileId: qualityProfileID, RootFolderPath: rootFolderPath,
 		SeriesType: seriesType,
 		CreatedAt:  createdAt, UpdatedAt: updatedAt,
+		ContentRating: contentRating,
 	}
 }
 
 func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, contentRating string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -2006,7 +2008,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 	err := row.Scan(&id, &tmdbID, &name, &originalName, &year, &overview, &tagline,
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
-		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt)
+		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt, &contentRating)
 	if err != nil {
 		return nil
 	}
@@ -2040,6 +2042,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 		QualityProfileId: qualityProfileID, RootFolderPath: rootFolderPath,
 		SeriesType: seriesType,
 		CreatedAt:  createdAt, UpdatedAt: updatedAt,
+		ContentRating: contentRating,
 	}
 }
 
@@ -2147,7 +2150,7 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	query := `SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		status, network, first_air_date, last_air_date, vote_average, genres,
 		poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series`
+		quality_profile_id, root_folder_path, series_type, created_at, updated_at, content_rating FROM series`
 	countQuery := `SELECT COUNT(*) FROM series`
 
 	var args []any
@@ -2215,7 +2218,7 @@ func (m *Module) GetItem(ctx context.Context, req *mediaadminv1.GetItemRequest) 
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at, content_rating FROM series WHERE id = ?`,
 		req.GetId(),
 	)
 
@@ -2257,6 +2260,11 @@ func (m *Module) UpdateMetadata(ctx context.Context, req *mediaadminv1.UpdateMet
 				return nil, fmt.Errorf("update root_folder_path: %w", err)
 			}
 		}
+		if v, ok := meta["content_rating"]; ok {
+			if _, err := m.db.ExecContext(ctx, `UPDATE series SET content_rating=?, updated_at=? WHERE id=?`, strings.TrimSpace(v), now, req.GetId()); err != nil {
+				return nil, fmt.Errorf("update content_rating: %w", err)
+			}
+		}
 		if v, ok := meta["series_type"]; ok {
 			st, err := normalizeSeriesType(v)
 			if err != nil {
@@ -2283,7 +2291,7 @@ func (m *Module) UpdateMetadata(ctx context.Context, req *mediaadminv1.UpdateMet
 		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
 		 status, network, first_air_date, last_air_date, vote_average, genres,
 		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		 quality_profile_id, root_folder_path, series_type, created_at, updated_at, content_rating FROM series WHERE id = ?`,
 		req.GetId(),
 	)
 	series := m.scanSingleSeries(row)

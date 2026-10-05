@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.21] - 2026-10-05
+
+### Added
+- Series records store `content_rating` (proto field 27, sqlite column). AddTVShow and the admin metadata map persist it; list and get return it. Empty means unknown. Metadata refresh does not invent a certification — TMDB TV details still have no rating field.
+
 ## [0.1.20] - 2026-10-05
 
 
