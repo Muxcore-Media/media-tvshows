@@ -1174,7 +1174,7 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 
 	metaClient := metadatav1.NewMetadataServiceClient(conn)
 	details, err := metaClient.GetTVDetails(ctx, &metadatav1.GetTVDetailsRequest{
-		TmdbId: tmdbID,
+		Id: tmdbID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("metadata fetch: %w", err)
@@ -1255,7 +1255,7 @@ func (m *Module) populateEpisodesFromMetadata(ctx context.Context, metaClient me
 			continue
 		}
 		seasonResp, err := metaClient.GetSeasonDetails(ctx, &metadatav1.GetSeasonDetailsRequest{
-			TmdbId:       tmdbID,
+			Id:           tmdbID,
 			SeasonNumber: s.GetSeasonNumber(),
 		})
 		if err != nil {
@@ -1359,7 +1359,7 @@ func (m *Module) populateSeasonsFromMetadata(ctx context.Context, seriesID strin
 
 	metaClient := metadatav1.NewMetadataServiceClient(conn)
 	details, err := metaClient.GetTVDetails(ctx, &metadatav1.GetTVDetailsRequest{
-		TmdbId: tmdbID,
+		Id: tmdbID,
 	})
 	if err != nil {
 		slog.Debug("fetch tv details for season population", "error", err)

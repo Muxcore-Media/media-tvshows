@@ -213,8 +213,8 @@ func (m *Module) fetchSeriesAlternativeTitles(ctx context.Context, tmdbID int32)
 	defer func() { _ = conn.Close() }()
 
 	resp, err := metadatav1.NewMetadataServiceClient(conn).GetAlternativeTitles(ctx, &metadatav1.GetAlternativeTitlesRequest{
-		TmdbId: tmdbID,
-		Type:   metadatav1.MediaType_MEDIA_TYPE_TV,
+		Id:   tmdbID,
+		Type: metadatav1.MediaType_MEDIA_TYPE_TV,
 	})
 	if err != nil {
 		return nil, err
