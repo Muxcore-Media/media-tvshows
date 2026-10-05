@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -40,7 +41,9 @@ type Module struct {
 	mu    sync.RWMutex
 	cfgMu sync.RWMutex
 	db    *sql.DB
-	mc    *client.Client
+	// mc is the core mesh client, set asynchronously by dialCore. Always read
+	// it via coreClient(); nil means not (yet) connected.
+	mc atomic.Pointer[client.Client]
 
 	id       string
 	dbPath   string
@@ -380,10 +383,10 @@ func (m *Module) Stop(ctx context.Context) error {
 	if m.rootsConn != nil {
 		_ = m.rootsConn.Close()
 	}
-	m.mu.Lock()
-	if m.mc != nil {
-		_ = m.mc.Close()
+	if c := m.mc.Swap(nil); c != nil {
+		_ = c.Close()
 	}
+	m.mu.Lock()
 	if m.db != nil {
 		_ = m.db.Close()
 		m.db = nil
@@ -420,28 +423,31 @@ func (m *Module) dialCore(ctx context.Context) {
 		slog.Error("media-tvshows: dial core", "error", err)
 		return
 	}
-	m.mu.Lock()
-	m.mc = c
-	m.mu.Unlock()
+	m.mc.Store(c)
 	slog.Info("media-tvshows: connected to core mesh", "addr", meshAddr)
 }
 
+// coreClient returns the core mesh client, or nil if not yet connected.
+func (m *Module) coreClient() *client.Client { return m.mc.Load() }
+
 func (m *Module) publish(ctx context.Context, eventType string, payload map[string]interface{}) {
-	if m.mc == nil {
+	mc := m.coreClient()
+	if mc == nil {
 		return
 	}
 	data, _ := json.Marshal(payload)
-	if err := m.mc.Events.Publish(ctx, eventType, m.id, data); err != nil {
+	if err := mc.Events.Publish(ctx, eventType, m.id, data); err != nil {
 		slog.Warn("publish event failed", "type", eventType, "error", err)
 	}
 }
 
 func (m *Module) subscribeToFileImported() {
 	time.Sleep(15 * time.Second)
-	if m.mc == nil {
+	mc := m.coreClient()
+	if mc == nil {
 		return
 	}
-	ch, cancel, err := m.mc.Events.Subscribe(context.Background(), contracts.EventFileImported)
+	ch, cancel, err := mc.Events.Subscribe(context.Background(), contracts.EventFileImported)
 	if err != nil {
 		slog.Warn("subscribe to file imported events", "error", err)
 		return
@@ -860,10 +866,11 @@ func pickBestSearchResult(results []*metadatav1.SearchResult, year int32, movie 
 }
 
 func (m *Module) findMetadataModule(ctx context.Context) (string, error) {
-	if m.mc == nil {
+	mc := m.coreClient()
+	if mc == nil {
 		return "", fmt.Errorf("not connected to core")
 	}
-	modules, err := m.mc.Discovery.FindByCapability(ctx, "metadata")
+	modules, err := mc.Discovery.FindByCapability(ctx, "metadata")
 	if err != nil {
 		return "", fmt.Errorf("discover metadata: %w", err)
 	}
