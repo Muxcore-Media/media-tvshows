@@ -123,15 +123,26 @@ func (m *Module) backfillSeriesTitles(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	defer func() { _ = rows.Close() }()
+	// Drain and close the cursor before upserting: writing while the read
+	// cursor is open risks SQLITE_BUSY and deadlocks on a single-conn pool.
+	type pending struct{ id, name, original string }
+	var todo []pending
 	for rows.Next() {
-		var id, name, original string
-		if err := rows.Scan(&id, &name, &original); err != nil {
+		var p pending
+		if err := rows.Scan(&p.id, &p.name, &p.original); err != nil {
 			continue
 		}
-		m.upsertSeriesTitleLocked(ctx, id, name, titleSourcePrimary)
-		if original != "" && cleanMatchTitle(original) != cleanMatchTitle(name) {
-			m.upsertSeriesTitleLocked(ctx, id, original, titleSourceOriginal)
+		todo = append(todo, p)
+	}
+	iterErr := rows.Err()
+	_ = rows.Close()
+	if iterErr != nil {
+		return
+	}
+	for _, p := range todo {
+		m.upsertSeriesTitleLocked(ctx, p.id, p.name, titleSourcePrimary)
+		if p.original != "" && cleanMatchTitle(p.original) != cleanMatchTitle(p.name) {
+			m.upsertSeriesTitleLocked(ctx, p.id, p.original, titleSourceOriginal)
 		}
 	}
 }
