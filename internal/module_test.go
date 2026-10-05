@@ -157,6 +157,51 @@ func TestContentRatingRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLookupEpisodeByID(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+	add, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{
+		TmdbId:        1399,
+		Name:          "The Boys",
+		Year:          2019,
+		Genres:        []string{"Action"},
+		ContentRating: "TV-MA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := m.dbConn().ExecContext(ctx,
+		`INSERT INTO seasons (id, series_id, season_number, name, created_at, updated_at) VALUES (?, ?, 1, 'Season 1', ?, ?)`,
+		"season-test", add.SeriesId, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.dbConn().ExecContext(ctx,
+		`INSERT INTO episodes (id, series_id, season_id, episode_number, season_number, name, created_at, updated_at) VALUES (?, ?, ?, 1, 1, 'Pilot', ?, ?)`,
+		"ep-test", add.SeriesId, "season-test", now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.LookupEpisodeByID(ctx, &tvmgmtv1.LookupEpisodeByIDRequest{EpisodeId: "ep-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.GetFound() || got.GetSeriesId() != add.SeriesId || got.GetContentRating() != "TV-MA" {
+		t.Fatalf("lookup = %+v", got)
+	}
+	if len(got.GetGenres()) != 1 || got.GetGenres()[0] != "Action" {
+		t.Fatalf("genres = %v", got.GetGenres())
+	}
+	missing, err := m.LookupEpisodeByID(ctx, &tvmgmtv1.LookupEpisodeByIDRequest{EpisodeId: "nope"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing.GetFound() {
+		t.Fatal("expected missing episode")
+	}
+}
+
 func TestAddDuplicateTMDBID(t *testing.T) {
 	m := newTestModule(t)
 	ctx := context.Background()

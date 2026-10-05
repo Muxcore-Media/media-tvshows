@@ -1672,6 +1672,37 @@ func (m *Module) LookupEpisode(ctx context.Context, req *tvmgmtv1.LookupEpisodeR
 	}, nil
 }
 
+func (m *Module) LookupEpisodeByID(ctx context.Context, req *tvmgmtv1.LookupEpisodeByIDRequest) (*tvmgmtv1.LookupEpisodeByIDResponse, error) {
+	db := m.dbConn()
+	if db == nil {
+		return nil, fmt.Errorf("not initialized")
+	}
+	id := strings.TrimSpace(req.GetEpisodeId())
+	if id == "" {
+		return &tvmgmtv1.LookupEpisodeByIDResponse{}, nil
+	}
+	var seriesID, genresStr, contentRating string
+	err := db.QueryRowContext(ctx,
+		`SELECT s.id, s.genres, COALESCE(s.content_rating, '')
+		 FROM episodes e JOIN series s ON s.id = e.series_id
+		 WHERE e.id = ?`, id,
+	).Scan(&seriesID, &genresStr, &contentRating)
+	if err == sql.ErrNoRows {
+		return &tvmgmtv1.LookupEpisodeByIDResponse{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lookup episode: %w", err)
+	}
+	var genres []string
+	_ = json.Unmarshal([]byte(genresStr), &genres)
+	if genres == nil {
+		genres = []string{}
+	}
+	return &tvmgmtv1.LookupEpisodeByIDResponse{
+		Found: true, SeriesId: seriesID, Genres: genres, ContentRating: contentRating,
+	}, nil
+}
+
 func (m *Module) UpdateEpisodeMonitored(ctx context.Context, req *tvmgmtv1.UpdateEpisodeMonitoredRequest) (*tvmgmtv1.UpdateEpisodeMonitoredResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

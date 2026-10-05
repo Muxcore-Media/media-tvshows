@@ -40,6 +40,7 @@ const (
 	TvManagementService_AddAlternateTitle_FullMethodName      = "/muxcore.media.tv.v1.TvManagementService/AddAlternateTitle"
 	TvManagementService_RemoveAlternateTitle_FullMethodName   = "/muxcore.media.tv.v1.TvManagementService/RemoveAlternateTitle"
 	TvManagementService_LookupEpisode_FullMethodName          = "/muxcore.media.tv.v1.TvManagementService/LookupEpisode"
+	TvManagementService_LookupEpisodeByID_FullMethodName      = "/muxcore.media.tv.v1.TvManagementService/LookupEpisodeByID"
 )
 
 // TvManagementServiceClient is the client API for TvManagementService service.
@@ -67,6 +68,8 @@ type TvManagementServiceClient interface {
 	AddAlternateTitle(ctx context.Context, in *AddAlternateTitleRequest, opts ...grpc.CallOption) (*AddAlternateTitleResponse, error)
 	RemoveAlternateTitle(ctx context.Context, in *RemoveAlternateTitleRequest, opts ...grpc.CallOption) (*RemoveAlternateTitleResponse, error)
 	LookupEpisode(ctx context.Context, in *LookupEpisodeRequest, opts ...grpc.CallOption) (*LookupEpisodeResponse, error)
+	// Parental and other stream gates resolve an episode id to its series rating.
+	LookupEpisodeByID(ctx context.Context, in *LookupEpisodeByIDRequest, opts ...grpc.CallOption) (*LookupEpisodeByIDResponse, error)
 }
 
 type tvManagementServiceClient struct {
@@ -287,6 +290,16 @@ func (c *tvManagementServiceClient) LookupEpisode(ctx context.Context, in *Looku
 	return out, nil
 }
 
+func (c *tvManagementServiceClient) LookupEpisodeByID(ctx context.Context, in *LookupEpisodeByIDRequest, opts ...grpc.CallOption) (*LookupEpisodeByIDResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LookupEpisodeByIDResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_LookupEpisodeByID_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TvManagementServiceServer is the server API for TvManagementService service.
 // All implementations must embed UnimplementedTvManagementServiceServer
 // for forward compatibility.
@@ -312,6 +325,8 @@ type TvManagementServiceServer interface {
 	AddAlternateTitle(context.Context, *AddAlternateTitleRequest) (*AddAlternateTitleResponse, error)
 	RemoveAlternateTitle(context.Context, *RemoveAlternateTitleRequest) (*RemoveAlternateTitleResponse, error)
 	LookupEpisode(context.Context, *LookupEpisodeRequest) (*LookupEpisodeResponse, error)
+	// Parental and other stream gates resolve an episode id to its series rating.
+	LookupEpisodeByID(context.Context, *LookupEpisodeByIDRequest) (*LookupEpisodeByIDResponse, error)
 	mustEmbedUnimplementedTvManagementServiceServer()
 }
 
@@ -384,6 +399,9 @@ func (UnimplementedTvManagementServiceServer) RemoveAlternateTitle(context.Conte
 }
 func (UnimplementedTvManagementServiceServer) LookupEpisode(context.Context, *LookupEpisodeRequest) (*LookupEpisodeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupEpisode not implemented")
+}
+func (UnimplementedTvManagementServiceServer) LookupEpisodeByID(context.Context, *LookupEpisodeByIDRequest) (*LookupEpisodeByIDResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupEpisodeByID not implemented")
 }
 func (UnimplementedTvManagementServiceServer) mustEmbedUnimplementedTvManagementServiceServer() {}
 func (UnimplementedTvManagementServiceServer) testEmbeddedByValue()                             {}
@@ -784,6 +802,24 @@ func _TvManagementService_LookupEpisode_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TvManagementService_LookupEpisodeByID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LookupEpisodeByIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).LookupEpisodeByID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_LookupEpisodeByID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).LookupEpisodeByID(ctx, req.(*LookupEpisodeByIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TvManagementService_ServiceDesc is the grpc.ServiceDesc for TvManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -874,6 +910,10 @@ var TvManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupEpisode",
 			Handler:    _TvManagementService_LookupEpisode_Handler,
+		},
+		{
+			MethodName: "LookupEpisodeByID",
+			Handler:    _TvManagementService_LookupEpisodeByID_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

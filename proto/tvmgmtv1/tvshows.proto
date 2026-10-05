@@ -24,6 +24,8 @@ service TvManagementService {
   rpc AddAlternateTitle(AddAlternateTitleRequest) returns (AddAlternateTitleResponse);
   rpc RemoveAlternateTitle(RemoveAlternateTitleRequest) returns (RemoveAlternateTitleResponse);
   rpc LookupEpisode(LookupEpisodeRequest) returns (LookupEpisodeResponse);
+  // Parental and other stream gates resolve an episode id to its series rating.
+  rpc LookupEpisodeByID(LookupEpisodeByIDRequest) returns (LookupEpisodeByIDResponse);
 }
 
 message AddTVShowRequest {
@@ -306,6 +308,17 @@ message LookupEpisodeResponse {
   int32 episode_number = 7;
   int32 absolute_number = 8;
   bool found = 9;
+}
+
+message LookupEpisodeByIDRequest {
+  string episode_id = 1;
+}
+
+message LookupEpisodeByIDResponse {
+  bool found = 1;
+  string series_id = 2;
+  repeated string genres = 3;
+  string content_rating = 4;
 }
 
 message ListAlternateTitlesRequest {

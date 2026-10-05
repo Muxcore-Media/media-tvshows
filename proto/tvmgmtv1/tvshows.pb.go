@@ -2831,6 +2831,118 @@ func (x *LookupEpisodeResponse) GetFound() bool {
 	return false
 }
 
+type LookupEpisodeByIDRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EpisodeId     string                 `protobuf:"bytes,1,opt,name=episode_id,json=episodeId,proto3" json:"episode_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LookupEpisodeByIDRequest) Reset() {
+	*x = LookupEpisodeByIDRequest{}
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LookupEpisodeByIDRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LookupEpisodeByIDRequest) ProtoMessage() {}
+
+func (x *LookupEpisodeByIDRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LookupEpisodeByIDRequest.ProtoReflect.Descriptor instead.
+func (*LookupEpisodeByIDRequest) Descriptor() ([]byte, []int) {
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *LookupEpisodeByIDRequest) GetEpisodeId() string {
+	if x != nil {
+		return x.EpisodeId
+	}
+	return ""
+}
+
+type LookupEpisodeByIDResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
+	SeriesId      string                 `protobuf:"bytes,2,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	Genres        []string               `protobuf:"bytes,3,rep,name=genres,proto3" json:"genres,omitempty"`
+	ContentRating string                 `protobuf:"bytes,4,opt,name=content_rating,json=contentRating,proto3" json:"content_rating,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LookupEpisodeByIDResponse) Reset() {
+	*x = LookupEpisodeByIDResponse{}
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LookupEpisodeByIDResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LookupEpisodeByIDResponse) ProtoMessage() {}
+
+func (x *LookupEpisodeByIDResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LookupEpisodeByIDResponse.ProtoReflect.Descriptor instead.
+func (*LookupEpisodeByIDResponse) Descriptor() ([]byte, []int) {
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *LookupEpisodeByIDResponse) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *LookupEpisodeByIDResponse) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+func (x *LookupEpisodeByIDResponse) GetGenres() []string {
+	if x != nil {
+		return x.Genres
+	}
+	return nil
+}
+
+func (x *LookupEpisodeByIDResponse) GetContentRating() string {
+	if x != nil {
+		return x.ContentRating
+	}
+	return ""
+}
+
 type ListAlternateTitlesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SeriesId      string                 `protobuf:"bytes,1,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
@@ -2840,7 +2952,7 @@ type ListAlternateTitlesRequest struct {
 
 func (x *ListAlternateTitlesRequest) Reset() {
 	*x = ListAlternateTitlesRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2852,7 +2964,7 @@ func (x *ListAlternateTitlesRequest) String() string {
 func (*ListAlternateTitlesRequest) ProtoMessage() {}
 
 func (x *ListAlternateTitlesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2865,7 +2977,7 @@ func (x *ListAlternateTitlesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAlternateTitlesRequest.ProtoReflect.Descriptor instead.
 func (*ListAlternateTitlesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{42}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListAlternateTitlesRequest) GetSeriesId() string {
@@ -2887,7 +2999,7 @@ type AlternateTitle struct {
 
 func (x *AlternateTitle) Reset() {
 	*x = AlternateTitle{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2899,7 +3011,7 @@ func (x *AlternateTitle) String() string {
 func (*AlternateTitle) ProtoMessage() {}
 
 func (x *AlternateTitle) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2912,7 +3024,7 @@ func (x *AlternateTitle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlternateTitle.ProtoReflect.Descriptor instead.
 func (*AlternateTitle) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{43}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *AlternateTitle) GetId() string {
@@ -2952,7 +3064,7 @@ type ListAlternateTitlesResponse struct {
 
 func (x *ListAlternateTitlesResponse) Reset() {
 	*x = ListAlternateTitlesResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2964,7 +3076,7 @@ func (x *ListAlternateTitlesResponse) String() string {
 func (*ListAlternateTitlesResponse) ProtoMessage() {}
 
 func (x *ListAlternateTitlesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2977,7 +3089,7 @@ func (x *ListAlternateTitlesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAlternateTitlesResponse.ProtoReflect.Descriptor instead.
 func (*ListAlternateTitlesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{44}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ListAlternateTitlesResponse) GetTitles() []*AlternateTitle {
@@ -2997,7 +3109,7 @@ type AddAlternateTitleRequest struct {
 
 func (x *AddAlternateTitleRequest) Reset() {
 	*x = AddAlternateTitleRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3009,7 +3121,7 @@ func (x *AddAlternateTitleRequest) String() string {
 func (*AddAlternateTitleRequest) ProtoMessage() {}
 
 func (x *AddAlternateTitleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3022,7 +3134,7 @@ func (x *AddAlternateTitleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAlternateTitleRequest.ProtoReflect.Descriptor instead.
 func (*AddAlternateTitleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{45}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *AddAlternateTitleRequest) GetSeriesId() string {
@@ -3048,7 +3160,7 @@ type AddAlternateTitleResponse struct {
 
 func (x *AddAlternateTitleResponse) Reset() {
 	*x = AddAlternateTitleResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3060,7 +3172,7 @@ func (x *AddAlternateTitleResponse) String() string {
 func (*AddAlternateTitleResponse) ProtoMessage() {}
 
 func (x *AddAlternateTitleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3073,7 +3185,7 @@ func (x *AddAlternateTitleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAlternateTitleResponse.ProtoReflect.Descriptor instead.
 func (*AddAlternateTitleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{46}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *AddAlternateTitleResponse) GetTitle() *AlternateTitle {
@@ -3093,7 +3205,7 @@ type RemoveAlternateTitleRequest struct {
 
 func (x *RemoveAlternateTitleRequest) Reset() {
 	*x = RemoveAlternateTitleRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3105,7 +3217,7 @@ func (x *RemoveAlternateTitleRequest) String() string {
 func (*RemoveAlternateTitleRequest) ProtoMessage() {}
 
 func (x *RemoveAlternateTitleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3118,7 +3230,7 @@ func (x *RemoveAlternateTitleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAlternateTitleRequest.ProtoReflect.Descriptor instead.
 func (*RemoveAlternateTitleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{47}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *RemoveAlternateTitleRequest) GetSeriesId() string {
@@ -3143,7 +3255,7 @@ type RemoveAlternateTitleResponse struct {
 
 func (x *RemoveAlternateTitleResponse) Reset() {
 	*x = RemoveAlternateTitleResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3155,7 +3267,7 @@ func (x *RemoveAlternateTitleResponse) String() string {
 func (*RemoveAlternateTitleResponse) ProtoMessage() {}
 
 func (x *RemoveAlternateTitleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3168,7 +3280,7 @@ func (x *RemoveAlternateTitleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAlternateTitleResponse.ProtoReflect.Descriptor instead.
 func (*RemoveAlternateTitleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{48}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{50}
 }
 
 var File_proto_tvmgmtv1_tvshows_proto protoreflect.FileDescriptor
@@ -3418,6 +3530,14 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x0eepisode_number\x18\a \x01(\x05R\repisodeNumber\x12'\n" +
 	"\x0fabsolute_number\x18\b \x01(\x05R\x0eabsoluteNumber\x12\x14\n" +
 	"\x05found\x18\t \x01(\bR\x05found\"9\n" +
+	"\x18LookupEpisodeByIDRequest\x12\x1d\n" +
+	"\n" +
+	"episode_id\x18\x01 \x01(\tR\tepisodeId\"\x8d\x01\n" +
+	"\x19LookupEpisodeByIDResponse\x12\x14\n" +
+	"\x05found\x18\x01 \x01(\bR\x05found\x12\x1b\n" +
+	"\tseries_id\x18\x02 \x01(\tR\bseriesId\x12\x16\n" +
+	"\x06genres\x18\x03 \x03(\tR\x06genres\x12%\n" +
+	"\x0econtent_rating\x18\x04 \x01(\tR\rcontentRating\"9\n" +
 	"\x1aListAlternateTitlesRequest\x12\x1b\n" +
 	"\tseries_id\x18\x01 \x01(\tR\bseriesId\"o\n" +
 	"\x0eAlternateTitle\x12\x0e\n" +
@@ -3436,7 +3556,7 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x1bRemoveAlternateTitleRequest\x12\x1b\n" +
 	"\tseries_id\x18\x01 \x01(\tR\bseriesId\x12\x19\n" +
 	"\btitle_id\x18\x02 \x01(\tR\atitleId\"\x1e\n" +
-	"\x1cRemoveAlternateTitleResponse2\xb6\x11\n" +
+	"\x1cRemoveAlternateTitleResponse2\xaa\x12\n" +
 	"\x13TvManagementService\x12Z\n" +
 	"\tAddTVShow\x12%.muxcore.media.tv.v1.AddTVShowRequest\x1a&.muxcore.media.tv.v1.AddTVShowResponse\x12c\n" +
 	"\fRemoveTVShow\x12(.muxcore.media.tv.v1.RemoveTVShowRequest\x1a).muxcore.media.tv.v1.RemoveTVShowResponse\x12l\n" +
@@ -3458,7 +3578,8 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x13ListAlternateTitles\x12/.muxcore.media.tv.v1.ListAlternateTitlesRequest\x1a0.muxcore.media.tv.v1.ListAlternateTitlesResponse\x12r\n" +
 	"\x11AddAlternateTitle\x12-.muxcore.media.tv.v1.AddAlternateTitleRequest\x1a..muxcore.media.tv.v1.AddAlternateTitleResponse\x12{\n" +
 	"\x14RemoveAlternateTitle\x120.muxcore.media.tv.v1.RemoveAlternateTitleRequest\x1a1.muxcore.media.tv.v1.RemoveAlternateTitleResponse\x12f\n" +
-	"\rLookupEpisode\x12).muxcore.media.tv.v1.LookupEpisodeRequest\x1a*.muxcore.media.tv.v1.LookupEpisodeResponseB@Z>github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1;tvmgmtv1b\x06proto3"
+	"\rLookupEpisode\x12).muxcore.media.tv.v1.LookupEpisodeRequest\x1a*.muxcore.media.tv.v1.LookupEpisodeResponse\x12r\n" +
+	"\x11LookupEpisodeByID\x12-.muxcore.media.tv.v1.LookupEpisodeByIDRequest\x1a..muxcore.media.tv.v1.LookupEpisodeByIDResponseB@Z>github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1;tvmgmtv1b\x06proto3"
 
 var (
 	file_proto_tvmgmtv1_tvshows_proto_rawDescOnce sync.Once
@@ -3472,7 +3593,7 @@ func file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP() []byte {
 	return file_proto_tvmgmtv1_tvshows_proto_rawDescData
 }
 
-var file_proto_tvmgmtv1_tvshows_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_proto_tvmgmtv1_tvshows_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
 var file_proto_tvmgmtv1_tvshows_proto_goTypes = []any{
 	(*AddTVShowRequest)(nil),               // 0: muxcore.media.tv.v1.AddTVShowRequest
 	(*AddTVShowResponse)(nil),              // 1: muxcore.media.tv.v1.AddTVShowResponse
@@ -3516,13 +3637,15 @@ var file_proto_tvmgmtv1_tvshows_proto_goTypes = []any{
 	(*CalendarItem)(nil),                   // 39: muxcore.media.tv.v1.CalendarItem
 	(*LookupEpisodeRequest)(nil),           // 40: muxcore.media.tv.v1.LookupEpisodeRequest
 	(*LookupEpisodeResponse)(nil),          // 41: muxcore.media.tv.v1.LookupEpisodeResponse
-	(*ListAlternateTitlesRequest)(nil),     // 42: muxcore.media.tv.v1.ListAlternateTitlesRequest
-	(*AlternateTitle)(nil),                 // 43: muxcore.media.tv.v1.AlternateTitle
-	(*ListAlternateTitlesResponse)(nil),    // 44: muxcore.media.tv.v1.ListAlternateTitlesResponse
-	(*AddAlternateTitleRequest)(nil),       // 45: muxcore.media.tv.v1.AddAlternateTitleRequest
-	(*AddAlternateTitleResponse)(nil),      // 46: muxcore.media.tv.v1.AddAlternateTitleResponse
-	(*RemoveAlternateTitleRequest)(nil),    // 47: muxcore.media.tv.v1.RemoveAlternateTitleRequest
-	(*RemoveAlternateTitleResponse)(nil),   // 48: muxcore.media.tv.v1.RemoveAlternateTitleResponse
+	(*LookupEpisodeByIDRequest)(nil),       // 42: muxcore.media.tv.v1.LookupEpisodeByIDRequest
+	(*LookupEpisodeByIDResponse)(nil),      // 43: muxcore.media.tv.v1.LookupEpisodeByIDResponse
+	(*ListAlternateTitlesRequest)(nil),     // 44: muxcore.media.tv.v1.ListAlternateTitlesRequest
+	(*AlternateTitle)(nil),                 // 45: muxcore.media.tv.v1.AlternateTitle
+	(*ListAlternateTitlesResponse)(nil),    // 46: muxcore.media.tv.v1.ListAlternateTitlesResponse
+	(*AddAlternateTitleRequest)(nil),       // 47: muxcore.media.tv.v1.AddAlternateTitleRequest
+	(*AddAlternateTitleResponse)(nil),      // 48: muxcore.media.tv.v1.AddAlternateTitleResponse
+	(*RemoveAlternateTitleRequest)(nil),    // 49: muxcore.media.tv.v1.RemoveAlternateTitleRequest
+	(*RemoveAlternateTitleResponse)(nil),   // 50: muxcore.media.tv.v1.RemoveAlternateTitleResponse
 }
 var file_proto_tvmgmtv1_tvshows_proto_depIdxs = []int32{
 	19, // 0: muxcore.media.tv.v1.ListTVShowsResponse.series:type_name -> muxcore.media.tv.v1.TVSeries
@@ -3534,8 +3657,8 @@ var file_proto_tvmgmtv1_tvshows_proto_depIdxs = []int32{
 	32, // 6: muxcore.media.tv.v1.ListTagsResponse.tags:type_name -> muxcore.media.tv.v1.Tag
 	32, // 7: muxcore.media.tv.v1.GetItemTagsResponse.tags:type_name -> muxcore.media.tv.v1.Tag
 	39, // 8: muxcore.media.tv.v1.GetCalendarResponse.items:type_name -> muxcore.media.tv.v1.CalendarItem
-	43, // 9: muxcore.media.tv.v1.ListAlternateTitlesResponse.titles:type_name -> muxcore.media.tv.v1.AlternateTitle
-	43, // 10: muxcore.media.tv.v1.AddAlternateTitleResponse.title:type_name -> muxcore.media.tv.v1.AlternateTitle
+	45, // 9: muxcore.media.tv.v1.ListAlternateTitlesResponse.titles:type_name -> muxcore.media.tv.v1.AlternateTitle
+	45, // 10: muxcore.media.tv.v1.AddAlternateTitleResponse.title:type_name -> muxcore.media.tv.v1.AlternateTitle
 	0,  // 11: muxcore.media.tv.v1.TvManagementService.AddTVShow:input_type -> muxcore.media.tv.v1.AddTVShowRequest
 	2,  // 12: muxcore.media.tv.v1.TvManagementService.RemoveTVShow:input_type -> muxcore.media.tv.v1.RemoveTVShowRequest
 	4,  // 13: muxcore.media.tv.v1.TvManagementService.RefreshMetadata:input_type -> muxcore.media.tv.v1.RefreshMetadataRequest
@@ -3553,33 +3676,35 @@ var file_proto_tvmgmtv1_tvshows_proto_depIdxs = []int32{
 	33, // 25: muxcore.media.tv.v1.TvManagementService.SetItemTags:input_type -> muxcore.media.tv.v1.SetItemTagsRequest
 	35, // 26: muxcore.media.tv.v1.TvManagementService.GetItemTags:input_type -> muxcore.media.tv.v1.GetItemTagsRequest
 	37, // 27: muxcore.media.tv.v1.TvManagementService.GetCalendar:input_type -> muxcore.media.tv.v1.GetCalendarRequest
-	42, // 28: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:input_type -> muxcore.media.tv.v1.ListAlternateTitlesRequest
-	45, // 29: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:input_type -> muxcore.media.tv.v1.AddAlternateTitleRequest
-	47, // 30: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:input_type -> muxcore.media.tv.v1.RemoveAlternateTitleRequest
+	44, // 28: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:input_type -> muxcore.media.tv.v1.ListAlternateTitlesRequest
+	47, // 29: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:input_type -> muxcore.media.tv.v1.AddAlternateTitleRequest
+	49, // 30: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:input_type -> muxcore.media.tv.v1.RemoveAlternateTitleRequest
 	40, // 31: muxcore.media.tv.v1.TvManagementService.LookupEpisode:input_type -> muxcore.media.tv.v1.LookupEpisodeRequest
-	1,  // 32: muxcore.media.tv.v1.TvManagementService.AddTVShow:output_type -> muxcore.media.tv.v1.AddTVShowResponse
-	3,  // 33: muxcore.media.tv.v1.TvManagementService.RemoveTVShow:output_type -> muxcore.media.tv.v1.RemoveTVShowResponse
-	5,  // 34: muxcore.media.tv.v1.TvManagementService.RefreshMetadata:output_type -> muxcore.media.tv.v1.RefreshMetadataResponse
-	7,  // 35: muxcore.media.tv.v1.TvManagementService.ListTVShows:output_type -> muxcore.media.tv.v1.ListTVShowsResponse
-	9,  // 36: muxcore.media.tv.v1.TvManagementService.ListMissing:output_type -> muxcore.media.tv.v1.ListMissingResponse
-	12, // 37: muxcore.media.tv.v1.TvManagementService.GetTVShow:output_type -> muxcore.media.tv.v1.GetTVShowResponse
-	18, // 38: muxcore.media.tv.v1.TvManagementService.UpdateTVShow:output_type -> muxcore.media.tv.v1.UpdateTVShowResponse
-	14, // 39: muxcore.media.tv.v1.TvManagementService.UpdateEpisodeMonitored:output_type -> muxcore.media.tv.v1.UpdateEpisodeMonitoredResponse
-	16, // 40: muxcore.media.tv.v1.TvManagementService.UpdateSeasonMonitored:output_type -> muxcore.media.tv.v1.UpdateSeasonMonitoredResponse
-	23, // 41: muxcore.media.tv.v1.TvManagementService.AddEpisodeFile:output_type -> muxcore.media.tv.v1.AddEpisodeFileResponse
-	25, // 42: muxcore.media.tv.v1.TvManagementService.RemoveEpisodeFile:output_type -> muxcore.media.tv.v1.RemoveEpisodeFileResponse
-	27, // 43: muxcore.media.tv.v1.TvManagementService.CreateTag:output_type -> muxcore.media.tv.v1.CreateTagResponse
-	29, // 44: muxcore.media.tv.v1.TvManagementService.DeleteTag:output_type -> muxcore.media.tv.v1.DeleteTagResponse
-	31, // 45: muxcore.media.tv.v1.TvManagementService.ListTags:output_type -> muxcore.media.tv.v1.ListTagsResponse
-	34, // 46: muxcore.media.tv.v1.TvManagementService.SetItemTags:output_type -> muxcore.media.tv.v1.SetItemTagsResponse
-	36, // 47: muxcore.media.tv.v1.TvManagementService.GetItemTags:output_type -> muxcore.media.tv.v1.GetItemTagsResponse
-	38, // 48: muxcore.media.tv.v1.TvManagementService.GetCalendar:output_type -> muxcore.media.tv.v1.GetCalendarResponse
-	44, // 49: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:output_type -> muxcore.media.tv.v1.ListAlternateTitlesResponse
-	46, // 50: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:output_type -> muxcore.media.tv.v1.AddAlternateTitleResponse
-	48, // 51: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:output_type -> muxcore.media.tv.v1.RemoveAlternateTitleResponse
-	41, // 52: muxcore.media.tv.v1.TvManagementService.LookupEpisode:output_type -> muxcore.media.tv.v1.LookupEpisodeResponse
-	32, // [32:53] is the sub-list for method output_type
-	11, // [11:32] is the sub-list for method input_type
+	42, // 32: muxcore.media.tv.v1.TvManagementService.LookupEpisodeByID:input_type -> muxcore.media.tv.v1.LookupEpisodeByIDRequest
+	1,  // 33: muxcore.media.tv.v1.TvManagementService.AddTVShow:output_type -> muxcore.media.tv.v1.AddTVShowResponse
+	3,  // 34: muxcore.media.tv.v1.TvManagementService.RemoveTVShow:output_type -> muxcore.media.tv.v1.RemoveTVShowResponse
+	5,  // 35: muxcore.media.tv.v1.TvManagementService.RefreshMetadata:output_type -> muxcore.media.tv.v1.RefreshMetadataResponse
+	7,  // 36: muxcore.media.tv.v1.TvManagementService.ListTVShows:output_type -> muxcore.media.tv.v1.ListTVShowsResponse
+	9,  // 37: muxcore.media.tv.v1.TvManagementService.ListMissing:output_type -> muxcore.media.tv.v1.ListMissingResponse
+	12, // 38: muxcore.media.tv.v1.TvManagementService.GetTVShow:output_type -> muxcore.media.tv.v1.GetTVShowResponse
+	18, // 39: muxcore.media.tv.v1.TvManagementService.UpdateTVShow:output_type -> muxcore.media.tv.v1.UpdateTVShowResponse
+	14, // 40: muxcore.media.tv.v1.TvManagementService.UpdateEpisodeMonitored:output_type -> muxcore.media.tv.v1.UpdateEpisodeMonitoredResponse
+	16, // 41: muxcore.media.tv.v1.TvManagementService.UpdateSeasonMonitored:output_type -> muxcore.media.tv.v1.UpdateSeasonMonitoredResponse
+	23, // 42: muxcore.media.tv.v1.TvManagementService.AddEpisodeFile:output_type -> muxcore.media.tv.v1.AddEpisodeFileResponse
+	25, // 43: muxcore.media.tv.v1.TvManagementService.RemoveEpisodeFile:output_type -> muxcore.media.tv.v1.RemoveEpisodeFileResponse
+	27, // 44: muxcore.media.tv.v1.TvManagementService.CreateTag:output_type -> muxcore.media.tv.v1.CreateTagResponse
+	29, // 45: muxcore.media.tv.v1.TvManagementService.DeleteTag:output_type -> muxcore.media.tv.v1.DeleteTagResponse
+	31, // 46: muxcore.media.tv.v1.TvManagementService.ListTags:output_type -> muxcore.media.tv.v1.ListTagsResponse
+	34, // 47: muxcore.media.tv.v1.TvManagementService.SetItemTags:output_type -> muxcore.media.tv.v1.SetItemTagsResponse
+	36, // 48: muxcore.media.tv.v1.TvManagementService.GetItemTags:output_type -> muxcore.media.tv.v1.GetItemTagsResponse
+	38, // 49: muxcore.media.tv.v1.TvManagementService.GetCalendar:output_type -> muxcore.media.tv.v1.GetCalendarResponse
+	46, // 50: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:output_type -> muxcore.media.tv.v1.ListAlternateTitlesResponse
+	48, // 51: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:output_type -> muxcore.media.tv.v1.AddAlternateTitleResponse
+	50, // 52: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:output_type -> muxcore.media.tv.v1.RemoveAlternateTitleResponse
+	41, // 53: muxcore.media.tv.v1.TvManagementService.LookupEpisode:output_type -> muxcore.media.tv.v1.LookupEpisodeResponse
+	43, // 54: muxcore.media.tv.v1.TvManagementService.LookupEpisodeByID:output_type -> muxcore.media.tv.v1.LookupEpisodeByIDResponse
+	33, // [33:55] is the sub-list for method output_type
+	11, // [11:33] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
 	11, // [11:11] is the sub-list for extension extendee
 	0,  // [0:11] is the sub-list for field type_name
@@ -3597,7 +3722,7 @@ func file_proto_tvmgmtv1_tvshows_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_tvmgmtv1_tvshows_proto_rawDesc), len(file_proto_tvmgmtv1_tvshows_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   49,
+			NumMessages:   51,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

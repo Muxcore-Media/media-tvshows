@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.22] - 2026-10-05
+
+### Added
+- `LookupEpisodeByID` resolves an episode id to its series id, genres, and `content_rating` so playback can enforce parental rules from the catalog.
+
 ## [0.1.21] - 2026-10-05
 
 ### Added
