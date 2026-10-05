@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"testing"
+	"time"
 
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 )
@@ -75,5 +76,46 @@ func TestFindSeriesByAlternateTitles(t *testing.T) {
 	}
 	if id, _ := m.findSeries(0, "BrBa", 2008); id != add.SeriesId {
 		t.Errorf("user alt: got %q", id)
+	}
+}
+
+// TestBackfillSeriesTitlesSingleConn runs the backfill on a single-connection
+// pool. The old implementation upserted while its SELECT cursor was still open,
+// which needs a second connection and therefore hangs with MaxOpenConns(1).
+func TestBackfillSeriesTitlesSingleConn(t *testing.T) {
+	m := newTestModule(t)
+	ctx := context.Background()
+	m.db.SetMaxOpenConns(1)
+
+	for i, name := range []string{"Alpha Show", "Beta Show"} {
+		if _, err := m.db.ExecContext(ctx,
+			`INSERT INTO series (id, tmdb_id, name, original_name, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0)`,
+			"s"+name[:1], i+1, name, name+" Original"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.db.ExecContext(ctx, `DELETE FROM series_titles`); err != nil {
+		t.Fatal(err)
+	}
+
+	tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.backfillSeriesTitles(tctx)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("backfillSeriesTitles did not return (write inside open cursor)")
+	}
+
+	var n int
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM series_titles`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 4 {
+		t.Fatalf("series_titles rows = %d, want 4 (primary+original for 2 series)", n)
 	}
 }

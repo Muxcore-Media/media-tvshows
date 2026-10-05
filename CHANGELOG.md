@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.15] - 2026-10-05
+
+
+### Fixed
+- `backfillSeriesTitles` no longer writes while its read cursor is open: rows are drained and closed before the title upserts (NFR-REL; avoids SQLITE_BUSY / single-connection deadlock).
+
 ## [0.1.14] - 2026-10-05
 
 
