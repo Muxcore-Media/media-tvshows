@@ -1,0 +1,64 @@
+//go:build upgradeseed
+
+package internal
+
+import (
+	"context"
+	"database/sql"
+	"os"
+	"testing"
+)
+
+// TestUpgradeSeed creates a database at $UPGRADE_SEED_DB with the module's
+// own Init (schema of the checked-out tag) and seeds representative rows.
+func TestUpgradeSeed(t *testing.T) {
+	path := os.Getenv("UPGRADE_SEED_DB")
+	if path == "" {
+		t.Skip("UPGRADE_SEED_DB not set")
+	}
+	ctx := context.Background()
+	m := NewModule(Config{DBPath: path, ImageDir: t.TempDir(), GRPCAddr: "127.0.0.1:0", HTTPAddr: "127.0.0.1:0"})
+	if err := m.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_ = m.Stop(ctx)
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	stmts := []string{
+		`INSERT INTO series (id, tmdb_id, name, original_name, year, overview, tagline, status, network, first_air_date, last_air_date, vote_average, genres, poster_path, backdrop_path, monitored, total_seasons, total_episodes, quality_profile_id, root_folder_path, series_type, created_at, updated_at) VALUES
+		 ('ser_1', 1668, 'Breaking Bad', 'Breaking Bad', 2008, 'A chemistry teacher turns to crime.', 'Change the equation', 'Ended', 'AMC', '2008-01-20', '2013-09-29', 8.9, '["Drama","Crime"]', '/poster1.jpg', '/backdrop1.jpg', 1, 2, 3, 'qp_hd', '/media/tv/archive', 'standard', '2026-01-01T10:00:00Z', '2026-01-02T10:00:00Z'),
+		 ('ser_2', 37854, 'One Piece', 'ONE PIECE', 1999, 'Pirates.', '', 'Returning Series', 'Fuji TV', '1999-10-20', '', 8.7, '["Animation"]', '', '', 0, 1, 1, '', '/home/alice/anime', 'anime', '2026-02-01T10:00:00Z', '2026-02-01T10:00:00Z')`,
+		`INSERT INTO seasons (id, series_id, season_number, name, overview, episode_count, air_date, poster_path, monitored, created_at, updated_at) VALUES
+		 ('sea_1', 'ser_1', 1, 'Season 1', 'First season', 2, '2008-01-20', '/s1.jpg', 1, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z'),
+		 ('sea_2', 'ser_1', 2, 'Season 2', '', 1, '2009-03-08', '', 0, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z'),
+		 ('sea_3', 'ser_2', 1, 'East Blue', '', 1, '1999-10-20', '', 1, '2026-02-01T10:00:00Z', '2026-02-01T10:00:00Z')`,
+		`INSERT INTO episodes (id, series_id, season_id, tmdb_id, episode_number, season_number, absolute_number, name, overview, air_date, still_path, monitored, has_file, created_at, updated_at) VALUES
+		 ('ep_1', 'ser_1', 'sea_1', 62085, 1, 1, 1, 'Pilot', 'Walter White begins.', '2008-01-20', '/still1.jpg', 1, 1, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z'),
+		 ('ep_2', 'ser_1', 'sea_1', 62086, 2, 1, 2, 'Cats in the Bag', '', '2008-01-27', '', 1, 0, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z'),
+		 ('ep_3', 'ser_1', 'sea_2', 62087, 1, 2, 3, 'Seven Thirty-Seven', '', '2009-03-08', '', 0, 0, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z'),
+		 ('ep_4', 'ser_2', 'sea_3', 0, 1, 1, 1, 'I am Luffy', '', '1999-10-20', '', 1, 1, '2026-02-01T10:00:00Z', '2026-02-01T10:00:00Z')`,
+		`INSERT INTO episode_files (id, episode_id, file_path, quality, size_bytes, container, created_at) VALUES
+		 ('ef_1', 'ep_1', '/media/tv/archive/Breaking Bad/S01E01.mkv', 'Bluray-1080p', 2147483648, 'mkv', '2026-01-03T10:00:00Z'),
+		 ('ef_2', 'ep_4', '/home/alice/anime/One Piece/S01E01.mp4', 'WEBDL-720p', 524288000, 'mp4', '2026-02-03T10:00:00Z')`,
+		`INSERT INTO tags (id, label, created_at) VALUES ('tag_1', 'favorites', '2026-01-05T10:00:00Z'), ('tag_2', 'kids-ok', '2026-01-06T10:00:00Z')`,
+		`INSERT INTO item_tags (item_id, tag_id) VALUES ('ser_1', 'tag_1'), ('ser_1', 'tag_2'), ('ser_2', 'tag_1')`,
+		`INSERT INTO history (id, event_type, item_id, title, source_title, quality, indexer, file_path, download_id, data_json, created_at) VALUES
+		 ('th_1', 'grab', 'ep_1', 'Breaking Bad S01E01', 'Breaking.Bad.S01E01.1080p.BluRay', 'Bluray-1080p', 'fixture-indexer', '', 'dl_abc123', '{"download_protocol":"torrent","tmdb_id":1668}', '2026-01-02T12:00:00Z'),
+		 ('th_2', 'import', 'ep_1', 'Breaking Bad S01E01', '', 'Bluray-1080p', '', '/media/tv/archive/Breaking Bad/S01E01.mkv', 'dl_abc123', '{}', '2026-01-03T10:00:00Z'),
+		 ('th_3', 'delete_file', 'ep_4', 'One Piece S01E01', '', '', '', '/home/alice/anime/One Piece/old.mp4', '', '{}', '2026-02-04T10:00:00Z')`,
+		`INSERT INTO series_titles (id, series_id, title, clean_title, source) VALUES
+		 ('st_1', 'ser_1', 'Breaking Bad', 'breaking bad', 'primary'),
+		 ('st_2', 'ser_2', 'One Piece', 'one piece', 'primary'),
+		 ('st_3', 'ser_2', 'ONE PIECE', 'one piece jp', 'original'),
+		 ('st_4', 'ser_1', 'BB', 'bb', 'alias')`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			t.Fatalf("seed: %v\n%s", err, s)
+		}
+	}
+}
