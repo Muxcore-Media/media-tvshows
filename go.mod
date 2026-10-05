@@ -6,10 +6,10 @@ require (
 	github.com/Muxcore-Media/contracts-automation v0.1.1
 	github.com/Muxcore-Media/contracts-media-admin v0.1.1
 	github.com/Muxcore-Media/contracts-metadata v0.2.0
-	github.com/Muxcore-Media/core v0.6.0
+	github.com/Muxcore-Media/core v0.6.12
 	github.com/Muxcore-Media/core/pkg/contracts v0.6.0
-	github.com/Muxcore-Media/core/sdk/go/client v0.6.0
-	github.com/Muxcore-Media/core/sdk/go/module v0.6.1
+	github.com/Muxcore-Media/core/sdk/go/client v0.6.1
+	github.com/Muxcore-Media/core/sdk/go/module v0.6.3
 	github.com/Muxcore-Media/media-root-folders v0.1.7
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
