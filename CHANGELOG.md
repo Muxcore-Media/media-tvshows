@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.14] - 2026-10-05
+
+
+### Added
+- Upgrade test (ADR-0015, NFR-DATA-002, FR-INS-005): `internal/upgrade_test.go` opens a committed `v0.1.9` snapshot (`internal/testdata/upgrade/`) with the current code twice and checks schema superset, column defaults, seeded rows, and integrity. No migration bug found.
+
+### Changed
+- Test dependency `core/sdk/go/module` bumped to v0.6.1 (`moduletest`).
+
 ## [0.1.13] - 2026-10-05
 
 ### Changed
