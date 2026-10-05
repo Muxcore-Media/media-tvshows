@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	automationv1 "github.com/Muxcore-Media/contracts-automation/muxcore/automation/v1"
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
+	"github.com/Muxcore-Media/core/sdk/go/module/meshtls"
 )
 
 const capMediaAutomation = "media.automation"
@@ -79,7 +78,7 @@ func (m *Module) automationSearchItem(ctx context.Context, req *automationv1.Sea
 	if err != nil {
 		return nil, err
 	}
-	conn, err := grpc.NewClient(addr, meshGRPCDialOpts()...)
+	conn, err := meshtls.Dial(addr)
 	if err != nil {
 		return nil, fmt.Errorf("dial automation: %w", err)
 	}
@@ -102,10 +101,6 @@ func (m *Module) findAutomationAddr(ctx context.Context) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no %s module found", capMediaAutomation)
-}
-
-func meshGRPCDialOpts() []grpc.DialOption {
-	return []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 }
 
 func emptySearchIndexersResponse() *mediaadminv1.SearchIndexersResponse {

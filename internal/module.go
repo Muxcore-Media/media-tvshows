@@ -19,7 +19,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	automationv1 "github.com/Muxcore-Media/contracts-automation/muxcore/automation/v1"
@@ -28,6 +27,7 @@ import (
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	"github.com/Muxcore-Media/core/sdk/go/client"
 	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
+	"github.com/Muxcore-Media/core/sdk/go/module/meshtls"
 	rootsv1 "github.com/Muxcore-Media/media-root-folders/proto/rootsv1"
 	manifest "github.com/Muxcore-Media/media-tvshows"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
@@ -334,7 +334,11 @@ func (m *Module) Init(ctx context.Context) error {
 }
 
 func (m *Module) Start(ctx context.Context) error {
-	m.grpcSrv = grpc.NewServer()
+	srv, err := meshtls.NewServer()
+	if err != nil {
+		return fmt.Errorf("gRPC mesh TLS: %w", err)
+	}
+	m.grpcSrv = srv
 	mediaadminv1.RegisterMediaAdminServiceServer(m.grpcSrv, mediaAdminServer{m: m})
 	tvmgmtv1.RegisterTvManagementServiceServer(m.grpcSrv, m)
 	modulesdk.RegisterSettings(m.grpcSrv, m.id, m)
@@ -376,10 +380,10 @@ func (m *Module) Stop(ctx context.Context) error {
 	if m.rootsConn != nil {
 		_ = m.rootsConn.Close()
 	}
+	m.mu.Lock()
 	if m.mc != nil {
 		_ = m.mc.Close()
 	}
-	m.mu.Lock()
 	if m.db != nil {
 		_ = m.db.Close()
 		m.db = nil
@@ -416,7 +420,9 @@ func (m *Module) dialCore(ctx context.Context) {
 		slog.Error("media-tvshows: dial core", "error", err)
 		return
 	}
+	m.mu.Lock()
 	m.mc = c
+	m.mu.Unlock()
 	slog.Info("media-tvshows: connected to core mesh", "addr", meshAddr)
 }
 
@@ -800,7 +806,7 @@ func (m *Module) searchTVMetadata(ctx context.Context, title string, year int32)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := grpc.NewClient(metaAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := meshtls.Dial(metaAddr)
 	if err != nil {
 		return nil, fmt.Errorf("dial metadata: %w", err)
 	}
@@ -1167,7 +1173,7 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 		return nil, err
 	}
 
-	conn, err := grpc.NewClient(metaAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := meshtls.Dial(metaAddr)
 	if err != nil {
 		return nil, fmt.Errorf("dial metadata: %w", err)
 	}
@@ -1351,7 +1357,7 @@ func (m *Module) populateSeasonsFromMetadata(ctx context.Context, seriesID strin
 		return
 	}
 
-	conn, err := grpc.NewClient(metaAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := meshtls.Dial(metaAddr)
 	if err != nil {
 		slog.Debug("dial metadata for season population", "error", err)
 		return
