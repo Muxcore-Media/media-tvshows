@@ -1739,6 +1739,10 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 	if len(episodeIDs) == 0 {
 		return nil, fmt.Errorf("episode_id required")
 	}
+	filePath, err := m.confineMediaFile(ctx, req.GetFilePath(), "tv")
+	if err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	var firstFileID string
@@ -1752,21 +1756,21 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 				episodeID,
 			).Scan(&seriesID, &seriesName)
 		}
-		_, err := db.ExecContext(ctx,
+		_, err = db.ExecContext(ctx,
 			`INSERT INTO episode_files (id, episode_id, file_path, quality, size_bytes, container, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			id, episodeID, req.GetFilePath(), req.GetQuality(), req.GetSizeBytes(), req.GetContainer(), now,
+			id, episodeID, filePath, req.GetQuality(), req.GetSizeBytes(), req.GetContainer(), now,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert episode file: %w", err)
 		}
-		if _, err := db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, episodeID); err != nil {
+		if _, err = db.ExecContext(ctx, `UPDATE episodes SET has_file = 1, updated_at = ? WHERE id = ?`, now, episodeID); err != nil {
 			return nil, fmt.Errorf("update episode has_file: %w", err)
 		}
 
 		epID := episodeID
 		fileID := id
 		go m.publish(context.Background(), contracts.EventTVEpisodeFileAdded, map[string]interface{}{
-			"file_id": fileID, "episode_id": epID, "file_path": req.GetFilePath(), "quality": req.GetQuality(),
+			"file_id": fileID, "episode_id": epID, "file_path": filePath, "quality": req.GetQuality(),
 		})
 	}
 
@@ -1776,7 +1780,7 @@ func (m *Module) AddEpisodeFile(ctx context.Context, req *tvmgmtv1.AddEpisodeFil
 			ItemID:    seriesID,
 			Title:     seriesName,
 			Quality:   req.GetQuality(),
-			FilePath:  req.GetFilePath(),
+			FilePath:  filePath,
 			Data: map[string]any{
 				"file_id":     firstFileID,
 				"episode_ids": episodeIDs,

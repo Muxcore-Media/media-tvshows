@@ -31,12 +31,20 @@ func newTestModule(t *testing.T) *Module {
 		GRPCAddr: ":0",
 		HTTPAddr: ":0",
 	})
+	m.rootsListFn = func(context.Context, string) ([]string, error) {
+		return []string{"/media/tv", "/media/tv-uhd", "/media", "/tv", "/tmp", "/data/media/TV", "/library"}, nil
+	}
 	ctx := context.Background()
 	if err := m.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
 	t.Cleanup(func() { _ = m.Stop(ctx) })
 	return m
+}
+
+// setRoots overrides the registered tv roots for a test.
+func setRoots(m *Module, roots ...string) {
+	m.rootsListFn = func(context.Context, string) ([]string, error) { return roots, nil }
 }
 
 func TestModuleInfo(t *testing.T) {
@@ -746,6 +754,7 @@ func TestCacheRemoteArtwork(t *testing.T) {
 		_, _ = w.Write([]byte{0xff, 0xd8, 0xff, 0xd9})
 	}))
 	t.Cleanup(srv.Close)
+	allowLoopbackArtwork(t, srv)
 
 	add, err := m.AddTVShow(ctx, &tvmgmtv1.AddTVShowRequest{TmdbId: 1, Name: "Art", Year: 2020})
 	if err != nil {
