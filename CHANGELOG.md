@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.23] - 2026-10-08
+
+Version skips v0.1.22 (and, for media-tvshows, v0.1.21): tags with those numbers exist on unmerged branches that add an unauthenticated `content_rating` and are not part of this history.
 
 ### Added
 - Parental classification (ADR-0031 Decision 2, roadmap T-M4-01 slice S3). The series is the authority; seasons and episodes inherit it.
