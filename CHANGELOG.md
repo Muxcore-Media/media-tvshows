@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Parental classification (ADR-0031 Decision 2, roadmap T-M4-01 slice S3). The series is the authority; seasons and episodes inherit it.
+  - `TVSeries` gains `content_rating` (28), `content_rating_source` (29) and `tag_labels` (30), filled on `ListTVShows`, `GetTVShow` and `UpdateTVShow`. Empty rating and source mean "unavailable" (never "unrated"); `NR` is an explicit unrated record. A rating is never inferred (`vote_average` is not a rating) and no metadata path writes it.
+  - `SetContentRating` records, replaces, clears (empty rating) or marks explicit NR (`explicit_unrated`) the operator classification. Tokens are validated against the ADR-0031 ladder (local copy of `parental.RatingLevel`, pinned by a test); unknown tokens are `InvalidArgument`. No role check in the module: the BFF restricts it to admins, as for `SetItemTags`.
+  - `GetEpisode` returns a `TVEpisode` with its owning `series_id` (`NotFound` for unknown ids) so the BFF can classify `/stream/tv/<episode_id>` by series.
+  - `ListTVShowsRequest.classification_filter` (8; `enabled`, `max_rating` token, `allow_unrated`, `blocked_tags`, `allowed_tags`, same shape as media-movies) optionally narrows a list: an enabled filter always hides unavailable series, and `total`/pagination count only visible series.
+- Upgrade snapshot `testdata/upgrade/v0.1.20.db` (ADR-0015); `TestUpgradeFromSnapshots` now also asserts migrated series read as unavailable.
+
+### Changed
+- Proto field `TVSeries` 27 and `AddTVShowRequest` 11 are `reserved`: the unmerged `v0.1.21` tag (branch `cursor/tv-content-rating-4e06`, never on master) used them for an unauthenticated `content_rating`. The unmerged `v0.1.22` tag's `LookupEpisodeByID` is not built on; `GetEpisode` replaces it.
+- Startup migration (forward-only, idempotent): `series.parental_rating` and `series.parental_rating_source` (`TEXT NOT NULL DEFAULT ''`) are added with `ALTER TABLE`. Existing rows read as unavailable. The unmerged v0.1.21 tag's `content_rating` column, if present, is ignored.
+
 ## [0.1.20] - 2026-10-05
 
 

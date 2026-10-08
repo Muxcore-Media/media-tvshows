@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	mediaadminv1 "github.com/Muxcore-Media/contracts-media-admin/gen/muxcore/media/admin/v1"
@@ -13,7 +14,7 @@ import (
 
 // upgradeSnapshots lists committed snapshots produced by the named tag's own
 // code (ADR-0015). See testdata/upgrade/README.md.
-var upgradeSnapshots = []string{"v0.1.9"}
+var upgradeSnapshots = []string{"v0.1.9", "v0.1.20"}
 
 func openUpgradeModule(t *testing.T, dbPath string) *Module {
 	t.Helper()
@@ -165,6 +166,8 @@ func requireSeededRows(t *testing.T, ctx context.Context, m *Module) {
 		t.Errorf("ser_2 mismatch: %+v", s)
 	}
 
+	requireUnavailableClassification(t, ctx, m)
+
 	// episode files (personal paths)
 	for ep, want := range map[string]string{
 		"ep_1": "/media/tv/archive/Breaking Bad/S01E01.mkv",
@@ -227,5 +230,61 @@ func requireSeededRows(t *testing.T, ctx context.Context, m *Module) {
 	var alias string
 	if err := db.QueryRowContext(ctx, `SELECT title FROM series_titles WHERE id = 'st_4' AND source = 'alias' AND series_id = 'ser_1'`).Scan(&alias); err != nil || alias != "BB" {
 		t.Errorf("st_4 alias = %q, %v", alias, err)
+	}
+}
+
+// requireUnavailableClassification asserts the ADR-0031 migration contract: a
+// pre-existing database has no parental classification, every series reads as
+// "unavailable" (empty rating, empty source), nothing is inferred from other
+// data (ser_1 has vote_average 8.9 and a "kids-ok" tag), episodes still resolve
+// to their series, and an enabled filter shows none of them.
+func requireUnavailableClassification(t *testing.T, ctx context.Context, m *Module) {
+	t.Helper()
+
+	wantLabels := map[string][]string{
+		"ser_1": {"favorites", "kids-ok"},
+		"ser_2": {"favorites"},
+	}
+	list, err := m.ListTVShows(ctx, &tvmgmtv1.ListTVShowsRequest{})
+	if err != nil {
+		t.Fatalf("ListTVShows: %v", err)
+	}
+	if list.GetTotal() != 2 || len(list.GetSeries()) != 2 {
+		t.Fatalf("list total=%d len=%d, want 2", list.GetTotal(), len(list.GetSeries()))
+	}
+	for _, s := range list.GetSeries() {
+		if s.GetContentRating() != "" || s.GetContentRatingSource() != "" {
+			t.Errorf("%s: rating=%q source=%q, want unavailable (empty, empty)", s.GetId(), s.GetContentRating(), s.GetContentRatingSource())
+		}
+		if got := s.GetTagLabels(); !slices.Equal(got, wantLabels[s.GetId()]) {
+			t.Errorf("%s: tag_labels = %v, want %v", s.GetId(), got, wantLabels[s.GetId()])
+		}
+	}
+
+	got, err := m.GetTVShow(ctx, &tvmgmtv1.GetTVShowRequest{SeriesId: "ser_1"})
+	if err != nil {
+		t.Fatalf("GetTVShow ser_1: %v", err)
+	}
+	if s := got.GetSeries(); s.GetContentRating() != "" || s.GetContentRatingSource() != "" ||
+		!slices.Equal(s.GetTagLabels(), wantLabels["ser_1"]) {
+		t.Errorf("ser_1 detail classification = %q/%q/%v", s.GetContentRating(), s.GetContentRatingSource(), s.GetTagLabels())
+	}
+
+	for ep, series := range map[string]string{"ep_1": "ser_1", "ep_3": "ser_1", "ep_4": "ser_2"} {
+		r, err := m.GetEpisode(ctx, &tvmgmtv1.GetEpisodeRequest{EpisodeId: ep})
+		if err != nil || r.GetEpisode().GetSeriesId() != series {
+			t.Errorf("GetEpisode(%s) = %v, %v; want series %s", ep, r.GetEpisode(), err, series)
+		}
+	}
+
+	// Most permissive enabled filter: unavailable is hidden regardless.
+	filtered, err := m.ListTVShows(ctx, &tvmgmtv1.ListTVShowsRequest{
+		ClassificationFilter: &tvmgmtv1.ClassificationFilter{Enabled: true, AllowUnrated: true},
+	})
+	if err != nil {
+		t.Fatalf("ListTVShows filtered: %v", err)
+	}
+	if filtered.GetTotal() != 0 || len(filtered.GetSeries()) != 0 {
+		t.Errorf("filter over upgraded db: total=%d len=%d, want 0 (all unavailable)", filtered.GetTotal(), len(filtered.GetSeries()))
 	}
 }
