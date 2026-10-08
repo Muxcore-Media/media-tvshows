@@ -350,16 +350,20 @@ func (*RefreshMetadataResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListTVShowsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Page          int32                  `protobuf:"varint,1,opt,name=page,proto3" json:"page,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	Search        string                 `protobuf:"bytes,3,opt,name=search,proto3" json:"search,omitempty"`
-	Genre         string                 `protobuf:"bytes,4,opt,name=genre,proto3" json:"genre,omitempty"`
-	SortBy        string                 `protobuf:"bytes,5,opt,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
-	SortOrder     string                 `protobuf:"bytes,6,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
-	TagId         string                 `protobuf:"bytes,7,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Page      int32                  `protobuf:"varint,1,opt,name=page,proto3" json:"page,omitempty"`
+	PageSize  int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	Search    string                 `protobuf:"bytes,3,opt,name=search,proto3" json:"search,omitempty"`
+	Genre     string                 `protobuf:"bytes,4,opt,name=genre,proto3" json:"genre,omitempty"`
+	SortBy    string                 `protobuf:"bytes,5,opt,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
+	SortOrder string                 `protobuf:"bytes,6,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
+	TagId     string                 `protobuf:"bytes,7,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
+	// Optional parental narrowing (ADR-0031 Decision 2.1). It can only hide
+	// series: unset or enabled=false leaves the result unchanged. When enabled,
+	// total and pagination count only the visible series.
+	ClassificationFilter *ClassificationFilter `protobuf:"bytes,8,opt,name=classification_filter,json=classificationFilter,proto3" json:"classification_filter,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ListTVShowsRequest) Reset() {
@@ -441,6 +445,98 @@ func (x *ListTVShowsRequest) GetTagId() string {
 	return ""
 }
 
+func (x *ListTVShowsRequest) GetClassificationFilter() *ClassificationFilter {
+	if x != nil {
+		return x.ClassificationFilter
+	}
+	return nil
+}
+
+// ClassificationFilter hides series a restricted principal may not see. It is
+// evaluated per ADR-0031 Decision 2.6: a series with no recorded rating
+// (unavailable) is always hidden, an explicit NR is visible only when
+// allow_unrated is set, a rated series must not exceed max_rating, a blocked
+// tag hides the series, and a non-empty allowed_tags requires one match that
+// never overrides a rating denial. Tags compare by exact case-folded match.
+// Unknown tokens or empty tags are rejected with InvalidArgument.
+type ClassificationFilter struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Enabled bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// Rating ceiling token on the ADR-0031 ladder (for example "PG-13"). Empty
+	// means no ceiling. The BFF resolves kids_mode to "PG" before calling.
+	MaxRating     string   `protobuf:"bytes,2,opt,name=max_rating,json=maxRating,proto3" json:"max_rating,omitempty"`
+	AllowUnrated  bool     `protobuf:"varint,3,opt,name=allow_unrated,json=allowUnrated,proto3" json:"allow_unrated,omitempty"`
+	BlockedTags   []string `protobuf:"bytes,4,rep,name=blocked_tags,json=blockedTags,proto3" json:"blocked_tags,omitempty"`
+	AllowedTags   []string `protobuf:"bytes,5,rep,name=allowed_tags,json=allowedTags,proto3" json:"allowed_tags,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClassificationFilter) Reset() {
+	*x = ClassificationFilter{}
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClassificationFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClassificationFilter) ProtoMessage() {}
+
+func (x *ClassificationFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClassificationFilter.ProtoReflect.Descriptor instead.
+func (*ClassificationFilter) Descriptor() ([]byte, []int) {
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ClassificationFilter) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *ClassificationFilter) GetMaxRating() string {
+	if x != nil {
+		return x.MaxRating
+	}
+	return ""
+}
+
+func (x *ClassificationFilter) GetAllowUnrated() bool {
+	if x != nil {
+		return x.AllowUnrated
+	}
+	return false
+}
+
+func (x *ClassificationFilter) GetBlockedTags() []string {
+	if x != nil {
+		return x.BlockedTags
+	}
+	return nil
+}
+
+func (x *ClassificationFilter) GetAllowedTags() []string {
+	if x != nil {
+		return x.AllowedTags
+	}
+	return nil
+}
+
 type ListTVShowsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Series        []*TVSeries            `protobuf:"bytes,1,rep,name=series,proto3" json:"series,omitempty"`
@@ -453,7 +549,7 @@ type ListTVShowsResponse struct {
 
 func (x *ListTVShowsResponse) Reset() {
 	*x = ListTVShowsResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[7]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -465,7 +561,7 @@ func (x *ListTVShowsResponse) String() string {
 func (*ListTVShowsResponse) ProtoMessage() {}
 
 func (x *ListTVShowsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[7]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -478,7 +574,7 @@ func (x *ListTVShowsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTVShowsResponse.ProtoReflect.Descriptor instead.
 func (*ListTVShowsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{7}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListTVShowsResponse) GetSeries() []*TVSeries {
@@ -520,7 +616,7 @@ type ListMissingRequest struct {
 
 func (x *ListMissingRequest) Reset() {
 	*x = ListMissingRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[8]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -532,7 +628,7 @@ func (x *ListMissingRequest) String() string {
 func (*ListMissingRequest) ProtoMessage() {}
 
 func (x *ListMissingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[8]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -545,7 +641,7 @@ func (x *ListMissingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMissingRequest.ProtoReflect.Descriptor instead.
 func (*ListMissingRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{8}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListMissingRequest) GetPage() int32 {
@@ -581,7 +677,7 @@ type ListMissingResponse struct {
 
 func (x *ListMissingResponse) Reset() {
 	*x = ListMissingResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[9]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -593,7 +689,7 @@ func (x *ListMissingResponse) String() string {
 func (*ListMissingResponse) ProtoMessage() {}
 
 func (x *ListMissingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[9]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -606,7 +702,7 @@ func (x *ListMissingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMissingResponse.ProtoReflect.Descriptor instead.
 func (*ListMissingResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{9}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListMissingResponse) GetItems() []*MissingEpisodeItem {
@@ -656,7 +752,7 @@ type MissingEpisodeItem struct {
 
 func (x *MissingEpisodeItem) Reset() {
 	*x = MissingEpisodeItem{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[10]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -668,7 +764,7 @@ func (x *MissingEpisodeItem) String() string {
 func (*MissingEpisodeItem) ProtoMessage() {}
 
 func (x *MissingEpisodeItem) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[10]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -681,7 +777,7 @@ func (x *MissingEpisodeItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MissingEpisodeItem.ProtoReflect.Descriptor instead.
 func (*MissingEpisodeItem) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{10}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MissingEpisodeItem) GetEpisodeId() string {
@@ -770,7 +866,7 @@ type GetTVShowRequest struct {
 
 func (x *GetTVShowRequest) Reset() {
 	*x = GetTVShowRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[11]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -782,7 +878,7 @@ func (x *GetTVShowRequest) String() string {
 func (*GetTVShowRequest) ProtoMessage() {}
 
 func (x *GetTVShowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[11]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -795,7 +891,7 @@ func (x *GetTVShowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTVShowRequest.ProtoReflect.Descriptor instead.
 func (*GetTVShowRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{11}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetTVShowRequest) GetSeriesId() string {
@@ -814,7 +910,7 @@ type GetTVShowResponse struct {
 
 func (x *GetTVShowResponse) Reset() {
 	*x = GetTVShowResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[12]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -826,7 +922,7 @@ func (x *GetTVShowResponse) String() string {
 func (*GetTVShowResponse) ProtoMessage() {}
 
 func (x *GetTVShowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[12]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -839,7 +935,7 @@ func (x *GetTVShowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTVShowResponse.ProtoReflect.Descriptor instead.
 func (*GetTVShowResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{12}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetTVShowResponse) GetSeries() *TVSeries {
@@ -847,6 +943,196 @@ func (x *GetTVShowResponse) GetSeries() *TVSeries {
 		return x.Series
 	}
 	return nil
+}
+
+type GetEpisodeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EpisodeId     string                 `protobuf:"bytes,1,opt,name=episode_id,json=episodeId,proto3" json:"episode_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEpisodeRequest) Reset() {
+	*x = GetEpisodeRequest{}
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEpisodeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEpisodeRequest) ProtoMessage() {}
+
+func (x *GetEpisodeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEpisodeRequest.ProtoReflect.Descriptor instead.
+func (*GetEpisodeRequest) Descriptor() ([]byte, []int) {
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GetEpisodeRequest) GetEpisodeId() string {
+	if x != nil {
+		return x.EpisodeId
+	}
+	return ""
+}
+
+type GetEpisodeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Episode       *TVEpisode             `protobuf:"bytes,1,opt,name=episode,proto3" json:"episode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEpisodeResponse) Reset() {
+	*x = GetEpisodeResponse{}
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEpisodeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEpisodeResponse) ProtoMessage() {}
+
+func (x *GetEpisodeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEpisodeResponse.ProtoReflect.Descriptor instead.
+func (*GetEpisodeResponse) Descriptor() ([]byte, []int) {
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GetEpisodeResponse) GetEpisode() *TVEpisode {
+	if x != nil {
+		return x.Episode
+	}
+	return nil
+}
+
+type SetContentRatingRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	SeriesId string                 `protobuf:"bytes,1,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	// A rating token on the ADR-0031 ladder, for example "TV-14" or "PG-13"
+	// (case-insensitive). Empty together with explicit_unrated=false clears the
+	// operator value, returning the series to "unavailable". Unknown tokens are
+	// rejected with InvalidArgument. "NR" is not accepted here: use
+	// explicit_unrated.
+	ContentRating string `protobuf:"bytes,2,opt,name=content_rating,json=contentRating,proto3" json:"content_rating,omitempty"`
+	// Records an explicit NR; content_rating must then be empty.
+	ExplicitUnrated bool `protobuf:"varint,3,opt,name=explicit_unrated,json=explicitUnrated,proto3" json:"explicit_unrated,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetContentRatingRequest) Reset() {
+	*x = SetContentRatingRequest{}
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetContentRatingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetContentRatingRequest) ProtoMessage() {}
+
+func (x *SetContentRatingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetContentRatingRequest.ProtoReflect.Descriptor instead.
+func (*SetContentRatingRequest) Descriptor() ([]byte, []int) {
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SetContentRatingRequest) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+func (x *SetContentRatingRequest) GetContentRating() string {
+	if x != nil {
+		return x.ContentRating
+	}
+	return ""
+}
+
+func (x *SetContentRatingRequest) GetExplicitUnrated() bool {
+	if x != nil {
+		return x.ExplicitUnrated
+	}
+	return false
+}
+
+type SetContentRatingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetContentRatingResponse) Reset() {
+	*x = SetContentRatingResponse{}
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetContentRatingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetContentRatingResponse) ProtoMessage() {}
+
+func (x *SetContentRatingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetContentRatingResponse.ProtoReflect.Descriptor instead.
+func (*SetContentRatingResponse) Descriptor() ([]byte, []int) {
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{17}
 }
 
 type UpdateEpisodeMonitoredRequest struct {
@@ -859,7 +1145,7 @@ type UpdateEpisodeMonitoredRequest struct {
 
 func (x *UpdateEpisodeMonitoredRequest) Reset() {
 	*x = UpdateEpisodeMonitoredRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[13]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -871,7 +1157,7 @@ func (x *UpdateEpisodeMonitoredRequest) String() string {
 func (*UpdateEpisodeMonitoredRequest) ProtoMessage() {}
 
 func (x *UpdateEpisodeMonitoredRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[13]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -884,7 +1170,7 @@ func (x *UpdateEpisodeMonitoredRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEpisodeMonitoredRequest.ProtoReflect.Descriptor instead.
 func (*UpdateEpisodeMonitoredRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{13}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UpdateEpisodeMonitoredRequest) GetEpisodeId() string {
@@ -909,7 +1195,7 @@ type UpdateEpisodeMonitoredResponse struct {
 
 func (x *UpdateEpisodeMonitoredResponse) Reset() {
 	*x = UpdateEpisodeMonitoredResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[14]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -921,7 +1207,7 @@ func (x *UpdateEpisodeMonitoredResponse) String() string {
 func (*UpdateEpisodeMonitoredResponse) ProtoMessage() {}
 
 func (x *UpdateEpisodeMonitoredResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[14]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -934,7 +1220,7 @@ func (x *UpdateEpisodeMonitoredResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEpisodeMonitoredResponse.ProtoReflect.Descriptor instead.
 func (*UpdateEpisodeMonitoredResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{14}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{19}
 }
 
 type UpdateSeasonMonitoredRequest struct {
@@ -947,7 +1233,7 @@ type UpdateSeasonMonitoredRequest struct {
 
 func (x *UpdateSeasonMonitoredRequest) Reset() {
 	*x = UpdateSeasonMonitoredRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[15]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -959,7 +1245,7 @@ func (x *UpdateSeasonMonitoredRequest) String() string {
 func (*UpdateSeasonMonitoredRequest) ProtoMessage() {}
 
 func (x *UpdateSeasonMonitoredRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[15]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -972,7 +1258,7 @@ func (x *UpdateSeasonMonitoredRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSeasonMonitoredRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSeasonMonitoredRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{15}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *UpdateSeasonMonitoredRequest) GetSeasonId() string {
@@ -997,7 +1283,7 @@ type UpdateSeasonMonitoredResponse struct {
 
 func (x *UpdateSeasonMonitoredResponse) Reset() {
 	*x = UpdateSeasonMonitoredResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[16]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1009,7 +1295,7 @@ func (x *UpdateSeasonMonitoredResponse) String() string {
 func (*UpdateSeasonMonitoredResponse) ProtoMessage() {}
 
 func (x *UpdateSeasonMonitoredResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[16]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1308,7 @@ func (x *UpdateSeasonMonitoredResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSeasonMonitoredResponse.ProtoReflect.Descriptor instead.
 func (*UpdateSeasonMonitoredResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{16}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{21}
 }
 
 type UpdateTVShowRequest struct {
@@ -1038,7 +1324,7 @@ type UpdateTVShowRequest struct {
 
 func (x *UpdateTVShowRequest) Reset() {
 	*x = UpdateTVShowRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[17]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1050,7 +1336,7 @@ func (x *UpdateTVShowRequest) String() string {
 func (*UpdateTVShowRequest) ProtoMessage() {}
 
 func (x *UpdateTVShowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[17]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1063,7 +1349,7 @@ func (x *UpdateTVShowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTVShowRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTVShowRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{17}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UpdateTVShowRequest) GetSeriesId() string {
@@ -1110,7 +1396,7 @@ type UpdateTVShowResponse struct {
 
 func (x *UpdateTVShowResponse) Reset() {
 	*x = UpdateTVShowResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[18]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1122,7 +1408,7 @@ func (x *UpdateTVShowResponse) String() string {
 func (*UpdateTVShowResponse) ProtoMessage() {}
 
 func (x *UpdateTVShowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[18]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1135,7 +1421,7 @@ func (x *UpdateTVShowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTVShowResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTVShowResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{18}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdateTVShowResponse) GetSeries() *TVSeries {
@@ -1173,13 +1459,24 @@ type TVSeries struct {
 	QualityProfileId string                 `protobuf:"bytes,24,opt,name=quality_profile_id,json=qualityProfileId,proto3" json:"quality_profile_id,omitempty"`
 	RootFolderPath   string                 `protobuf:"bytes,25,opt,name=root_folder_path,json=rootFolderPath,proto3" json:"root_folder_path,omitempty"`
 	SeriesType       string                 `protobuf:"bytes,26,opt,name=series_type,json=seriesType,proto3" json:"series_type,omitempty"` // "standard", "daily", or "anime"
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Parental classification (ADR-0031 Decision 2). The series is the
+	// authority; its seasons and episodes carry no classification of their own
+	// and inherit this one. content_rating is a ladder token, or "NR" for an
+	// explicit unrated record. Empty rating with empty source means
+	// "unavailable" (nothing recorded, the state of every pre-existing series),
+	// never "unrated". A rating is never inferred: vote_average is not a rating.
+	ContentRating string `protobuf:"bytes,28,opt,name=content_rating,json=contentRating,proto3" json:"content_rating,omitempty"`
+	// "operator" | "" ("tmdb" is reserved for a later slice).
+	ContentRatingSource string `protobuf:"bytes,29,opt,name=content_rating_source,json=contentRatingSource,proto3" json:"content_rating_source,omitempty"`
+	// Labels of the series' operator tags, sorted, so list routes need no N+1.
+	TagLabels     []string `protobuf:"bytes,30,rep,name=tag_labels,json=tagLabels,proto3" json:"tag_labels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TVSeries) Reset() {
 	*x = TVSeries{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[19]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1191,7 +1488,7 @@ func (x *TVSeries) String() string {
 func (*TVSeries) ProtoMessage() {}
 
 func (x *TVSeries) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[19]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1204,7 +1501,7 @@ func (x *TVSeries) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TVSeries.ProtoReflect.Descriptor instead.
 func (*TVSeries) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{19}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *TVSeries) GetId() string {
@@ -1389,6 +1686,27 @@ func (x *TVSeries) GetSeriesType() string {
 	return ""
 }
 
+func (x *TVSeries) GetContentRating() string {
+	if x != nil {
+		return x.ContentRating
+	}
+	return ""
+}
+
+func (x *TVSeries) GetContentRatingSource() string {
+	if x != nil {
+		return x.ContentRatingSource
+	}
+	return ""
+}
+
+func (x *TVSeries) GetTagLabels() []string {
+	if x != nil {
+		return x.TagLabels
+	}
+	return nil
+}
+
 type TVSeason struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1409,7 +1727,7 @@ type TVSeason struct {
 
 func (x *TVSeason) Reset() {
 	*x = TVSeason{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[20]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1421,7 +1739,7 @@ func (x *TVSeason) String() string {
 func (*TVSeason) ProtoMessage() {}
 
 func (x *TVSeason) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[20]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1434,7 +1752,7 @@ func (x *TVSeason) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TVSeason.ProtoReflect.Descriptor instead.
 func (*TVSeason) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{20}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *TVSeason) GetId() string {
@@ -1544,7 +1862,7 @@ type TVEpisode struct {
 
 func (x *TVEpisode) Reset() {
 	*x = TVEpisode{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[21]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +1874,7 @@ func (x *TVEpisode) String() string {
 func (*TVEpisode) ProtoMessage() {}
 
 func (x *TVEpisode) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[21]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1887,7 @@ func (x *TVEpisode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TVEpisode.ProtoReflect.Descriptor instead.
 func (*TVEpisode) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{21}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *TVEpisode) GetId() string {
@@ -1691,7 +2009,7 @@ type AddEpisodeFileRequest struct {
 
 func (x *AddEpisodeFileRequest) Reset() {
 	*x = AddEpisodeFileRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[22]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1703,7 +2021,7 @@ func (x *AddEpisodeFileRequest) String() string {
 func (*AddEpisodeFileRequest) ProtoMessage() {}
 
 func (x *AddEpisodeFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[22]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1716,7 +2034,7 @@ func (x *AddEpisodeFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddEpisodeFileRequest.ProtoReflect.Descriptor instead.
 func (*AddEpisodeFileRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{22}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AddEpisodeFileRequest) GetEpisodeId() string {
@@ -1770,7 +2088,7 @@ type AddEpisodeFileResponse struct {
 
 func (x *AddEpisodeFileResponse) Reset() {
 	*x = AddEpisodeFileResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[23]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1782,7 +2100,7 @@ func (x *AddEpisodeFileResponse) String() string {
 func (*AddEpisodeFileResponse) ProtoMessage() {}
 
 func (x *AddEpisodeFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[23]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1795,7 +2113,7 @@ func (x *AddEpisodeFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddEpisodeFileResponse.ProtoReflect.Descriptor instead.
 func (*AddEpisodeFileResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{23}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AddEpisodeFileResponse) GetFileId() string {
@@ -1816,7 +2134,7 @@ type RemoveEpisodeFileRequest struct {
 
 func (x *RemoveEpisodeFileRequest) Reset() {
 	*x = RemoveEpisodeFileRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[24]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1828,7 +2146,7 @@ func (x *RemoveEpisodeFileRequest) String() string {
 func (*RemoveEpisodeFileRequest) ProtoMessage() {}
 
 func (x *RemoveEpisodeFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[24]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1841,7 +2159,7 @@ func (x *RemoveEpisodeFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveEpisodeFileRequest.ProtoReflect.Descriptor instead.
 func (*RemoveEpisodeFileRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{24}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RemoveEpisodeFileRequest) GetFileId() string {
@@ -1873,7 +2191,7 @@ type RemoveEpisodeFileResponse struct {
 
 func (x *RemoveEpisodeFileResponse) Reset() {
 	*x = RemoveEpisodeFileResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[25]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1885,7 +2203,7 @@ func (x *RemoveEpisodeFileResponse) String() string {
 func (*RemoveEpisodeFileResponse) ProtoMessage() {}
 
 func (x *RemoveEpisodeFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[25]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1898,7 +2216,7 @@ func (x *RemoveEpisodeFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveEpisodeFileResponse.ProtoReflect.Descriptor instead.
 func (*RemoveEpisodeFileResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{25}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{30}
 }
 
 type CreateTagRequest struct {
@@ -1910,7 +2228,7 @@ type CreateTagRequest struct {
 
 func (x *CreateTagRequest) Reset() {
 	*x = CreateTagRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[26]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1922,7 +2240,7 @@ func (x *CreateTagRequest) String() string {
 func (*CreateTagRequest) ProtoMessage() {}
 
 func (x *CreateTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[26]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1935,7 +2253,7 @@ func (x *CreateTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTagRequest.ProtoReflect.Descriptor instead.
 func (*CreateTagRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{26}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CreateTagRequest) GetLabel() string {
@@ -1954,7 +2272,7 @@ type CreateTagResponse struct {
 
 func (x *CreateTagResponse) Reset() {
 	*x = CreateTagResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[27]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1966,7 +2284,7 @@ func (x *CreateTagResponse) String() string {
 func (*CreateTagResponse) ProtoMessage() {}
 
 func (x *CreateTagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[27]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1979,7 +2297,7 @@ func (x *CreateTagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTagResponse.ProtoReflect.Descriptor instead.
 func (*CreateTagResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{27}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CreateTagResponse) GetTagId() string {
@@ -1998,7 +2316,7 @@ type DeleteTagRequest struct {
 
 func (x *DeleteTagRequest) Reset() {
 	*x = DeleteTagRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[28]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2010,7 +2328,7 @@ func (x *DeleteTagRequest) String() string {
 func (*DeleteTagRequest) ProtoMessage() {}
 
 func (x *DeleteTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[28]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2023,7 +2341,7 @@ func (x *DeleteTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTagRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTagRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{28}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DeleteTagRequest) GetTagId() string {
@@ -2041,7 +2359,7 @@ type DeleteTagResponse struct {
 
 func (x *DeleteTagResponse) Reset() {
 	*x = DeleteTagResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[29]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2053,7 +2371,7 @@ func (x *DeleteTagResponse) String() string {
 func (*DeleteTagResponse) ProtoMessage() {}
 
 func (x *DeleteTagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[29]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2066,7 +2384,7 @@ func (x *DeleteTagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTagResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTagResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{29}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{34}
 }
 
 type ListTagsRequest struct {
@@ -2077,7 +2395,7 @@ type ListTagsRequest struct {
 
 func (x *ListTagsRequest) Reset() {
 	*x = ListTagsRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[30]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2089,7 +2407,7 @@ func (x *ListTagsRequest) String() string {
 func (*ListTagsRequest) ProtoMessage() {}
 
 func (x *ListTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[30]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2102,7 +2420,7 @@ func (x *ListTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagsRequest.ProtoReflect.Descriptor instead.
 func (*ListTagsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{30}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{35}
 }
 
 type ListTagsResponse struct {
@@ -2114,7 +2432,7 @@ type ListTagsResponse struct {
 
 func (x *ListTagsResponse) Reset() {
 	*x = ListTagsResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[31]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2126,7 +2444,7 @@ func (x *ListTagsResponse) String() string {
 func (*ListTagsResponse) ProtoMessage() {}
 
 func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[31]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2139,7 +2457,7 @@ func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagsResponse.ProtoReflect.Descriptor instead.
 func (*ListTagsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{31}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListTagsResponse) GetTags() []*Tag {
@@ -2160,7 +2478,7 @@ type Tag struct {
 
 func (x *Tag) Reset() {
 	*x = Tag{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[32]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2172,7 +2490,7 @@ func (x *Tag) String() string {
 func (*Tag) ProtoMessage() {}
 
 func (x *Tag) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[32]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2185,7 +2503,7 @@ func (x *Tag) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tag.ProtoReflect.Descriptor instead.
 func (*Tag) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{32}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *Tag) GetId() string {
@@ -2219,7 +2537,7 @@ type SetItemTagsRequest struct {
 
 func (x *SetItemTagsRequest) Reset() {
 	*x = SetItemTagsRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[33]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2231,7 +2549,7 @@ func (x *SetItemTagsRequest) String() string {
 func (*SetItemTagsRequest) ProtoMessage() {}
 
 func (x *SetItemTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[33]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2244,7 +2562,7 @@ func (x *SetItemTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetItemTagsRequest.ProtoReflect.Descriptor instead.
 func (*SetItemTagsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{33}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *SetItemTagsRequest) GetItemId() string {
@@ -2269,7 +2587,7 @@ type SetItemTagsResponse struct {
 
 func (x *SetItemTagsResponse) Reset() {
 	*x = SetItemTagsResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[34]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2281,7 +2599,7 @@ func (x *SetItemTagsResponse) String() string {
 func (*SetItemTagsResponse) ProtoMessage() {}
 
 func (x *SetItemTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[34]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2294,7 +2612,7 @@ func (x *SetItemTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetItemTagsResponse.ProtoReflect.Descriptor instead.
 func (*SetItemTagsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{34}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{39}
 }
 
 type GetItemTagsRequest struct {
@@ -2306,7 +2624,7 @@ type GetItemTagsRequest struct {
 
 func (x *GetItemTagsRequest) Reset() {
 	*x = GetItemTagsRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[35]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2318,7 +2636,7 @@ func (x *GetItemTagsRequest) String() string {
 func (*GetItemTagsRequest) ProtoMessage() {}
 
 func (x *GetItemTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[35]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2331,7 +2649,7 @@ func (x *GetItemTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetItemTagsRequest.ProtoReflect.Descriptor instead.
 func (*GetItemTagsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{35}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetItemTagsRequest) GetItemId() string {
@@ -2350,7 +2668,7 @@ type GetItemTagsResponse struct {
 
 func (x *GetItemTagsResponse) Reset() {
 	*x = GetItemTagsResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[36]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2362,7 +2680,7 @@ func (x *GetItemTagsResponse) String() string {
 func (*GetItemTagsResponse) ProtoMessage() {}
 
 func (x *GetItemTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[36]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2375,7 +2693,7 @@ func (x *GetItemTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetItemTagsResponse.ProtoReflect.Descriptor instead.
 func (*GetItemTagsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{36}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetItemTagsResponse) GetTags() []*Tag {
@@ -2396,7 +2714,7 @@ type GetCalendarRequest struct {
 
 func (x *GetCalendarRequest) Reset() {
 	*x = GetCalendarRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[37]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2408,7 +2726,7 @@ func (x *GetCalendarRequest) String() string {
 func (*GetCalendarRequest) ProtoMessage() {}
 
 func (x *GetCalendarRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[37]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2421,7 +2739,7 @@ func (x *GetCalendarRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCalendarRequest.ProtoReflect.Descriptor instead.
 func (*GetCalendarRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{37}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetCalendarRequest) GetStartDate() string {
@@ -2454,7 +2772,7 @@ type GetCalendarResponse struct {
 
 func (x *GetCalendarResponse) Reset() {
 	*x = GetCalendarResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[38]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2466,7 +2784,7 @@ func (x *GetCalendarResponse) String() string {
 func (*GetCalendarResponse) ProtoMessage() {}
 
 func (x *GetCalendarResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[38]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2479,7 +2797,7 @@ func (x *GetCalendarResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCalendarResponse.ProtoReflect.Descriptor instead.
 func (*GetCalendarResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{38}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetCalendarResponse) GetItems() []*CalendarItem {
@@ -2507,7 +2825,7 @@ type CalendarItem struct {
 
 func (x *CalendarItem) Reset() {
 	*x = CalendarItem{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[39]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2519,7 +2837,7 @@ func (x *CalendarItem) String() string {
 func (*CalendarItem) ProtoMessage() {}
 
 func (x *CalendarItem) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[39]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2532,7 +2850,7 @@ func (x *CalendarItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CalendarItem.ProtoReflect.Descriptor instead.
 func (*CalendarItem) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{39}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CalendarItem) GetEpisodeId() string {
@@ -2621,7 +2939,7 @@ type LookupEpisodeRequest struct {
 
 func (x *LookupEpisodeRequest) Reset() {
 	*x = LookupEpisodeRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[40]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2633,7 +2951,7 @@ func (x *LookupEpisodeRequest) String() string {
 func (*LookupEpisodeRequest) ProtoMessage() {}
 
 func (x *LookupEpisodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[40]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2646,7 +2964,7 @@ func (x *LookupEpisodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupEpisodeRequest.ProtoReflect.Descriptor instead.
 func (*LookupEpisodeRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{40}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *LookupEpisodeRequest) GetTmdbId() int32 {
@@ -2722,7 +3040,7 @@ type LookupEpisodeResponse struct {
 
 func (x *LookupEpisodeResponse) Reset() {
 	*x = LookupEpisodeResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[41]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2734,7 +3052,7 @@ func (x *LookupEpisodeResponse) String() string {
 func (*LookupEpisodeResponse) ProtoMessage() {}
 
 func (x *LookupEpisodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[41]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2747,7 +3065,7 @@ func (x *LookupEpisodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupEpisodeResponse.ProtoReflect.Descriptor instead.
 func (*LookupEpisodeResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{41}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *LookupEpisodeResponse) GetSeriesId() string {
@@ -2822,7 +3140,7 @@ type ListAlternateTitlesRequest struct {
 
 func (x *ListAlternateTitlesRequest) Reset() {
 	*x = ListAlternateTitlesRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2834,7 +3152,7 @@ func (x *ListAlternateTitlesRequest) String() string {
 func (*ListAlternateTitlesRequest) ProtoMessage() {}
 
 func (x *ListAlternateTitlesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[42]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2847,7 +3165,7 @@ func (x *ListAlternateTitlesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAlternateTitlesRequest.ProtoReflect.Descriptor instead.
 func (*ListAlternateTitlesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{42}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListAlternateTitlesRequest) GetSeriesId() string {
@@ -2869,7 +3187,7 @@ type AlternateTitle struct {
 
 func (x *AlternateTitle) Reset() {
 	*x = AlternateTitle{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2881,7 +3199,7 @@ func (x *AlternateTitle) String() string {
 func (*AlternateTitle) ProtoMessage() {}
 
 func (x *AlternateTitle) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[43]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2894,7 +3212,7 @@ func (x *AlternateTitle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlternateTitle.ProtoReflect.Descriptor instead.
 func (*AlternateTitle) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{43}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *AlternateTitle) GetId() string {
@@ -2934,7 +3252,7 @@ type ListAlternateTitlesResponse struct {
 
 func (x *ListAlternateTitlesResponse) Reset() {
 	*x = ListAlternateTitlesResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2946,7 +3264,7 @@ func (x *ListAlternateTitlesResponse) String() string {
 func (*ListAlternateTitlesResponse) ProtoMessage() {}
 
 func (x *ListAlternateTitlesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[44]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2959,7 +3277,7 @@ func (x *ListAlternateTitlesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAlternateTitlesResponse.ProtoReflect.Descriptor instead.
 func (*ListAlternateTitlesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{44}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListAlternateTitlesResponse) GetTitles() []*AlternateTitle {
@@ -2979,7 +3297,7 @@ type AddAlternateTitleRequest struct {
 
 func (x *AddAlternateTitleRequest) Reset() {
 	*x = AddAlternateTitleRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2991,7 +3309,7 @@ func (x *AddAlternateTitleRequest) String() string {
 func (*AddAlternateTitleRequest) ProtoMessage() {}
 
 func (x *AddAlternateTitleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[45]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3004,7 +3322,7 @@ func (x *AddAlternateTitleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAlternateTitleRequest.ProtoReflect.Descriptor instead.
 func (*AddAlternateTitleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{45}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *AddAlternateTitleRequest) GetSeriesId() string {
@@ -3030,7 +3348,7 @@ type AddAlternateTitleResponse struct {
 
 func (x *AddAlternateTitleResponse) Reset() {
 	*x = AddAlternateTitleResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3042,7 +3360,7 @@ func (x *AddAlternateTitleResponse) String() string {
 func (*AddAlternateTitleResponse) ProtoMessage() {}
 
 func (x *AddAlternateTitleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[46]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3055,7 +3373,7 @@ func (x *AddAlternateTitleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAlternateTitleResponse.ProtoReflect.Descriptor instead.
 func (*AddAlternateTitleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{46}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *AddAlternateTitleResponse) GetTitle() *AlternateTitle {
@@ -3075,7 +3393,7 @@ type RemoveAlternateTitleRequest struct {
 
 func (x *RemoveAlternateTitleRequest) Reset() {
 	*x = RemoveAlternateTitleRequest{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3087,7 +3405,7 @@ func (x *RemoveAlternateTitleRequest) String() string {
 func (*RemoveAlternateTitleRequest) ProtoMessage() {}
 
 func (x *RemoveAlternateTitleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[47]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3100,7 +3418,7 @@ func (x *RemoveAlternateTitleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAlternateTitleRequest.ProtoReflect.Descriptor instead.
 func (*RemoveAlternateTitleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{47}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RemoveAlternateTitleRequest) GetSeriesId() string {
@@ -3125,7 +3443,7 @@ type RemoveAlternateTitleResponse struct {
 
 func (x *RemoveAlternateTitleResponse) Reset() {
 	*x = RemoveAlternateTitleResponse{}
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3137,7 +3455,7 @@ func (x *RemoveAlternateTitleResponse) String() string {
 func (*RemoveAlternateTitleResponse) ProtoMessage() {}
 
 func (x *RemoveAlternateTitleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[48]
+	mi := &file_proto_tvmgmtv1_tvshows_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3150,14 +3468,14 @@ func (x *RemoveAlternateTitleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAlternateTitleResponse.ProtoReflect.Descriptor instead.
 func (*RemoveAlternateTitleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{48}
+	return file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP(), []int{53}
 }
 
 var File_proto_tvmgmtv1_tvshows_proto protoreflect.FileDescriptor
 
 const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\n" +
-	"\x1cproto/tvmgmtv1/tvshows.proto\x12\x13muxcore.media.tv.v1\"\xc6\x02\n" +
+	"\x1cproto/tvmgmtv1/tvshows.proto\x12\x13muxcore.media.tv.v1\"\xcc\x02\n" +
 	"\x10AddTVShowRequest\x12\x17\n" +
 	"\atmdb_id\x18\x01 \x01(\x05R\x06tmdbId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3171,7 +3489,7 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x10root_folder_path\x18\t \x01(\tR\x0erootFolderPath\x12\x1f\n" +
 	"\vseries_type\x18\n" +
 	" \x01(\tR\n" +
-	"seriesType\"0\n" +
+	"seriesTypeJ\x04\b\v\x10\f\"0\n" +
 	"\x11AddTVShowResponse\x12\x1b\n" +
 	"\tseries_id\x18\x01 \x01(\tR\bseriesId\"U\n" +
 	"\x13RemoveTVShowRequest\x12\x1b\n" +
@@ -3180,7 +3498,7 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x14RemoveTVShowResponse\"5\n" +
 	"\x16RefreshMetadataRequest\x12\x1b\n" +
 	"\tseries_id\x18\x01 \x01(\tR\bseriesId\"\x19\n" +
-	"\x17RefreshMetadataResponse\"\xc2\x01\n" +
+	"\x17RefreshMetadataResponse\"\xa2\x02\n" +
 	"\x12ListTVShowsRequest\x12\x12\n" +
 	"\x04page\x18\x01 \x01(\x05R\x04page\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x16\n" +
@@ -3189,7 +3507,15 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\asort_by\x18\x05 \x01(\tR\x06sortBy\x12\x1d\n" +
 	"\n" +
 	"sort_order\x18\x06 \x01(\tR\tsortOrder\x12\x15\n" +
-	"\x06tag_id\x18\a \x01(\tR\x05tagId\"\x93\x01\n" +
+	"\x06tag_id\x18\a \x01(\tR\x05tagId\x12^\n" +
+	"\x15classification_filter\x18\b \x01(\v2).muxcore.media.tv.v1.ClassificationFilterR\x14classificationFilter\"\xba\x01\n" +
+	"\x14ClassificationFilter\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1d\n" +
+	"\n" +
+	"max_rating\x18\x02 \x01(\tR\tmaxRating\x12#\n" +
+	"\rallow_unrated\x18\x03 \x01(\bR\fallowUnrated\x12!\n" +
+	"\fblocked_tags\x18\x04 \x03(\tR\vblockedTags\x12!\n" +
+	"\fallowed_tags\x18\x05 \x03(\tR\vallowedTags\"\x93\x01\n" +
 	"\x13ListTVShowsResponse\x125\n" +
 	"\x06series\x18\x01 \x03(\v2\x1d.muxcore.media.tv.v1.TVSeriesR\x06series\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x12\n" +
@@ -3222,7 +3548,17 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x10GetTVShowRequest\x12\x1b\n" +
 	"\tseries_id\x18\x01 \x01(\tR\bseriesId\"J\n" +
 	"\x11GetTVShowResponse\x125\n" +
-	"\x06series\x18\x01 \x01(\v2\x1d.muxcore.media.tv.v1.TVSeriesR\x06series\"\\\n" +
+	"\x06series\x18\x01 \x01(\v2\x1d.muxcore.media.tv.v1.TVSeriesR\x06series\"2\n" +
+	"\x11GetEpisodeRequest\x12\x1d\n" +
+	"\n" +
+	"episode_id\x18\x01 \x01(\tR\tepisodeId\"N\n" +
+	"\x12GetEpisodeResponse\x128\n" +
+	"\aepisode\x18\x01 \x01(\v2\x1e.muxcore.media.tv.v1.TVEpisodeR\aepisode\"\x88\x01\n" +
+	"\x17SetContentRatingRequest\x12\x1b\n" +
+	"\tseries_id\x18\x01 \x01(\tR\bseriesId\x12%\n" +
+	"\x0econtent_rating\x18\x02 \x01(\tR\rcontentRating\x12)\n" +
+	"\x10explicit_unrated\x18\x03 \x01(\bR\x0fexplicitUnrated\"\x1a\n" +
+	"\x18SetContentRatingResponse\"\\\n" +
 	"\x1dUpdateEpisodeMonitoredRequest\x12\x1d\n" +
 	"\n" +
 	"episode_id\x18\x01 \x01(\tR\tepisodeId\x12\x1c\n" +
@@ -3245,7 +3581,7 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"_monitoredB\x0e\n" +
 	"\f_series_type\"M\n" +
 	"\x14UpdateTVShowResponse\x125\n" +
-	"\x06series\x18\x01 \x01(\v2\x1d.muxcore.media.tv.v1.TVSeriesR\x06series\"\xcf\x06\n" +
+	"\x06series\x18\x01 \x01(\v2\x1d.muxcore.media.tv.v1.TVSeriesR\x06series\"\xcf\a\n" +
 	"\bTVSeries\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\atmdb_id\x18\x02 \x01(\x05R\x06tmdbId\x12\x12\n" +
@@ -3278,7 +3614,11 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x12quality_profile_id\x18\x18 \x01(\tR\x10qualityProfileId\x12(\n" +
 	"\x10root_folder_path\x18\x19 \x01(\tR\x0erootFolderPath\x12\x1f\n" +
 	"\vseries_type\x18\x1a \x01(\tR\n" +
-	"seriesType\"\x85\x03\n" +
+	"seriesType\x12%\n" +
+	"\x0econtent_rating\x18\x1c \x01(\tR\rcontentRating\x122\n" +
+	"\x15content_rating_source\x18\x1d \x01(\tR\x13contentRatingSource\x12\x1d\n" +
+	"\n" +
+	"tag_labels\x18\x1e \x03(\tR\ttagLabelsJ\x04\b\x1b\x10\x1c\"\x85\x03\n" +
 	"\bTVSeason\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tseries_id\x18\x02 \x01(\tR\bseriesId\x12#\n" +
@@ -3416,7 +3756,7 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x1bRemoveAlternateTitleRequest\x12\x1b\n" +
 	"\tseries_id\x18\x01 \x01(\tR\bseriesId\x12\x19\n" +
 	"\btitle_id\x18\x02 \x01(\tR\atitleId\"\x1e\n" +
-	"\x1cRemoveAlternateTitleResponse2\xb6\x11\n" +
+	"\x1cRemoveAlternateTitleResponse2\x86\x13\n" +
 	"\x13TvManagementService\x12Z\n" +
 	"\tAddTVShow\x12%.muxcore.media.tv.v1.AddTVShowRequest\x1a&.muxcore.media.tv.v1.AddTVShowResponse\x12c\n" +
 	"\fRemoveTVShow\x12(.muxcore.media.tv.v1.RemoveTVShowRequest\x1a).muxcore.media.tv.v1.RemoveTVShowResponse\x12l\n" +
@@ -3438,7 +3778,10 @@ const file_proto_tvmgmtv1_tvshows_proto_rawDesc = "" +
 	"\x13ListAlternateTitles\x12/.muxcore.media.tv.v1.ListAlternateTitlesRequest\x1a0.muxcore.media.tv.v1.ListAlternateTitlesResponse\x12r\n" +
 	"\x11AddAlternateTitle\x12-.muxcore.media.tv.v1.AddAlternateTitleRequest\x1a..muxcore.media.tv.v1.AddAlternateTitleResponse\x12{\n" +
 	"\x14RemoveAlternateTitle\x120.muxcore.media.tv.v1.RemoveAlternateTitleRequest\x1a1.muxcore.media.tv.v1.RemoveAlternateTitleResponse\x12f\n" +
-	"\rLookupEpisode\x12).muxcore.media.tv.v1.LookupEpisodeRequest\x1a*.muxcore.media.tv.v1.LookupEpisodeResponseB@Z>github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1;tvmgmtv1b\x06proto3"
+	"\rLookupEpisode\x12).muxcore.media.tv.v1.LookupEpisodeRequest\x1a*.muxcore.media.tv.v1.LookupEpisodeResponse\x12o\n" +
+	"\x10SetContentRating\x12,.muxcore.media.tv.v1.SetContentRatingRequest\x1a-.muxcore.media.tv.v1.SetContentRatingResponse\x12]\n" +
+	"\n" +
+	"GetEpisode\x12&.muxcore.media.tv.v1.GetEpisodeRequest\x1a'.muxcore.media.tv.v1.GetEpisodeResponseB@Z>github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1;tvmgmtv1b\x06proto3"
 
 var (
 	file_proto_tvmgmtv1_tvshows_proto_rawDescOnce sync.Once
@@ -3452,7 +3795,7 @@ func file_proto_tvmgmtv1_tvshows_proto_rawDescGZIP() []byte {
 	return file_proto_tvmgmtv1_tvshows_proto_rawDescData
 }
 
-var file_proto_tvmgmtv1_tvshows_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_proto_tvmgmtv1_tvshows_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_proto_tvmgmtv1_tvshows_proto_goTypes = []any{
 	(*AddTVShowRequest)(nil),               // 0: muxcore.media.tv.v1.AddTVShowRequest
 	(*AddTVShowResponse)(nil),              // 1: muxcore.media.tv.v1.AddTVShowResponse
@@ -3461,108 +3804,119 @@ var file_proto_tvmgmtv1_tvshows_proto_goTypes = []any{
 	(*RefreshMetadataRequest)(nil),         // 4: muxcore.media.tv.v1.RefreshMetadataRequest
 	(*RefreshMetadataResponse)(nil),        // 5: muxcore.media.tv.v1.RefreshMetadataResponse
 	(*ListTVShowsRequest)(nil),             // 6: muxcore.media.tv.v1.ListTVShowsRequest
-	(*ListTVShowsResponse)(nil),            // 7: muxcore.media.tv.v1.ListTVShowsResponse
-	(*ListMissingRequest)(nil),             // 8: muxcore.media.tv.v1.ListMissingRequest
-	(*ListMissingResponse)(nil),            // 9: muxcore.media.tv.v1.ListMissingResponse
-	(*MissingEpisodeItem)(nil),             // 10: muxcore.media.tv.v1.MissingEpisodeItem
-	(*GetTVShowRequest)(nil),               // 11: muxcore.media.tv.v1.GetTVShowRequest
-	(*GetTVShowResponse)(nil),              // 12: muxcore.media.tv.v1.GetTVShowResponse
-	(*UpdateEpisodeMonitoredRequest)(nil),  // 13: muxcore.media.tv.v1.UpdateEpisodeMonitoredRequest
-	(*UpdateEpisodeMonitoredResponse)(nil), // 14: muxcore.media.tv.v1.UpdateEpisodeMonitoredResponse
-	(*UpdateSeasonMonitoredRequest)(nil),   // 15: muxcore.media.tv.v1.UpdateSeasonMonitoredRequest
-	(*UpdateSeasonMonitoredResponse)(nil),  // 16: muxcore.media.tv.v1.UpdateSeasonMonitoredResponse
-	(*UpdateTVShowRequest)(nil),            // 17: muxcore.media.tv.v1.UpdateTVShowRequest
-	(*UpdateTVShowResponse)(nil),           // 18: muxcore.media.tv.v1.UpdateTVShowResponse
-	(*TVSeries)(nil),                       // 19: muxcore.media.tv.v1.TVSeries
-	(*TVSeason)(nil),                       // 20: muxcore.media.tv.v1.TVSeason
-	(*TVEpisode)(nil),                      // 21: muxcore.media.tv.v1.TVEpisode
-	(*AddEpisodeFileRequest)(nil),          // 22: muxcore.media.tv.v1.AddEpisodeFileRequest
-	(*AddEpisodeFileResponse)(nil),         // 23: muxcore.media.tv.v1.AddEpisodeFileResponse
-	(*RemoveEpisodeFileRequest)(nil),       // 24: muxcore.media.tv.v1.RemoveEpisodeFileRequest
-	(*RemoveEpisodeFileResponse)(nil),      // 25: muxcore.media.tv.v1.RemoveEpisodeFileResponse
-	(*CreateTagRequest)(nil),               // 26: muxcore.media.tv.v1.CreateTagRequest
-	(*CreateTagResponse)(nil),              // 27: muxcore.media.tv.v1.CreateTagResponse
-	(*DeleteTagRequest)(nil),               // 28: muxcore.media.tv.v1.DeleteTagRequest
-	(*DeleteTagResponse)(nil),              // 29: muxcore.media.tv.v1.DeleteTagResponse
-	(*ListTagsRequest)(nil),                // 30: muxcore.media.tv.v1.ListTagsRequest
-	(*ListTagsResponse)(nil),               // 31: muxcore.media.tv.v1.ListTagsResponse
-	(*Tag)(nil),                            // 32: muxcore.media.tv.v1.Tag
-	(*SetItemTagsRequest)(nil),             // 33: muxcore.media.tv.v1.SetItemTagsRequest
-	(*SetItemTagsResponse)(nil),            // 34: muxcore.media.tv.v1.SetItemTagsResponse
-	(*GetItemTagsRequest)(nil),             // 35: muxcore.media.tv.v1.GetItemTagsRequest
-	(*GetItemTagsResponse)(nil),            // 36: muxcore.media.tv.v1.GetItemTagsResponse
-	(*GetCalendarRequest)(nil),             // 37: muxcore.media.tv.v1.GetCalendarRequest
-	(*GetCalendarResponse)(nil),            // 38: muxcore.media.tv.v1.GetCalendarResponse
-	(*CalendarItem)(nil),                   // 39: muxcore.media.tv.v1.CalendarItem
-	(*LookupEpisodeRequest)(nil),           // 40: muxcore.media.tv.v1.LookupEpisodeRequest
-	(*LookupEpisodeResponse)(nil),          // 41: muxcore.media.tv.v1.LookupEpisodeResponse
-	(*ListAlternateTitlesRequest)(nil),     // 42: muxcore.media.tv.v1.ListAlternateTitlesRequest
-	(*AlternateTitle)(nil),                 // 43: muxcore.media.tv.v1.AlternateTitle
-	(*ListAlternateTitlesResponse)(nil),    // 44: muxcore.media.tv.v1.ListAlternateTitlesResponse
-	(*AddAlternateTitleRequest)(nil),       // 45: muxcore.media.tv.v1.AddAlternateTitleRequest
-	(*AddAlternateTitleResponse)(nil),      // 46: muxcore.media.tv.v1.AddAlternateTitleResponse
-	(*RemoveAlternateTitleRequest)(nil),    // 47: muxcore.media.tv.v1.RemoveAlternateTitleRequest
-	(*RemoveAlternateTitleResponse)(nil),   // 48: muxcore.media.tv.v1.RemoveAlternateTitleResponse
+	(*ClassificationFilter)(nil),           // 7: muxcore.media.tv.v1.ClassificationFilter
+	(*ListTVShowsResponse)(nil),            // 8: muxcore.media.tv.v1.ListTVShowsResponse
+	(*ListMissingRequest)(nil),             // 9: muxcore.media.tv.v1.ListMissingRequest
+	(*ListMissingResponse)(nil),            // 10: muxcore.media.tv.v1.ListMissingResponse
+	(*MissingEpisodeItem)(nil),             // 11: muxcore.media.tv.v1.MissingEpisodeItem
+	(*GetTVShowRequest)(nil),               // 12: muxcore.media.tv.v1.GetTVShowRequest
+	(*GetTVShowResponse)(nil),              // 13: muxcore.media.tv.v1.GetTVShowResponse
+	(*GetEpisodeRequest)(nil),              // 14: muxcore.media.tv.v1.GetEpisodeRequest
+	(*GetEpisodeResponse)(nil),             // 15: muxcore.media.tv.v1.GetEpisodeResponse
+	(*SetContentRatingRequest)(nil),        // 16: muxcore.media.tv.v1.SetContentRatingRequest
+	(*SetContentRatingResponse)(nil),       // 17: muxcore.media.tv.v1.SetContentRatingResponse
+	(*UpdateEpisodeMonitoredRequest)(nil),  // 18: muxcore.media.tv.v1.UpdateEpisodeMonitoredRequest
+	(*UpdateEpisodeMonitoredResponse)(nil), // 19: muxcore.media.tv.v1.UpdateEpisodeMonitoredResponse
+	(*UpdateSeasonMonitoredRequest)(nil),   // 20: muxcore.media.tv.v1.UpdateSeasonMonitoredRequest
+	(*UpdateSeasonMonitoredResponse)(nil),  // 21: muxcore.media.tv.v1.UpdateSeasonMonitoredResponse
+	(*UpdateTVShowRequest)(nil),            // 22: muxcore.media.tv.v1.UpdateTVShowRequest
+	(*UpdateTVShowResponse)(nil),           // 23: muxcore.media.tv.v1.UpdateTVShowResponse
+	(*TVSeries)(nil),                       // 24: muxcore.media.tv.v1.TVSeries
+	(*TVSeason)(nil),                       // 25: muxcore.media.tv.v1.TVSeason
+	(*TVEpisode)(nil),                      // 26: muxcore.media.tv.v1.TVEpisode
+	(*AddEpisodeFileRequest)(nil),          // 27: muxcore.media.tv.v1.AddEpisodeFileRequest
+	(*AddEpisodeFileResponse)(nil),         // 28: muxcore.media.tv.v1.AddEpisodeFileResponse
+	(*RemoveEpisodeFileRequest)(nil),       // 29: muxcore.media.tv.v1.RemoveEpisodeFileRequest
+	(*RemoveEpisodeFileResponse)(nil),      // 30: muxcore.media.tv.v1.RemoveEpisodeFileResponse
+	(*CreateTagRequest)(nil),               // 31: muxcore.media.tv.v1.CreateTagRequest
+	(*CreateTagResponse)(nil),              // 32: muxcore.media.tv.v1.CreateTagResponse
+	(*DeleteTagRequest)(nil),               // 33: muxcore.media.tv.v1.DeleteTagRequest
+	(*DeleteTagResponse)(nil),              // 34: muxcore.media.tv.v1.DeleteTagResponse
+	(*ListTagsRequest)(nil),                // 35: muxcore.media.tv.v1.ListTagsRequest
+	(*ListTagsResponse)(nil),               // 36: muxcore.media.tv.v1.ListTagsResponse
+	(*Tag)(nil),                            // 37: muxcore.media.tv.v1.Tag
+	(*SetItemTagsRequest)(nil),             // 38: muxcore.media.tv.v1.SetItemTagsRequest
+	(*SetItemTagsResponse)(nil),            // 39: muxcore.media.tv.v1.SetItemTagsResponse
+	(*GetItemTagsRequest)(nil),             // 40: muxcore.media.tv.v1.GetItemTagsRequest
+	(*GetItemTagsResponse)(nil),            // 41: muxcore.media.tv.v1.GetItemTagsResponse
+	(*GetCalendarRequest)(nil),             // 42: muxcore.media.tv.v1.GetCalendarRequest
+	(*GetCalendarResponse)(nil),            // 43: muxcore.media.tv.v1.GetCalendarResponse
+	(*CalendarItem)(nil),                   // 44: muxcore.media.tv.v1.CalendarItem
+	(*LookupEpisodeRequest)(nil),           // 45: muxcore.media.tv.v1.LookupEpisodeRequest
+	(*LookupEpisodeResponse)(nil),          // 46: muxcore.media.tv.v1.LookupEpisodeResponse
+	(*ListAlternateTitlesRequest)(nil),     // 47: muxcore.media.tv.v1.ListAlternateTitlesRequest
+	(*AlternateTitle)(nil),                 // 48: muxcore.media.tv.v1.AlternateTitle
+	(*ListAlternateTitlesResponse)(nil),    // 49: muxcore.media.tv.v1.ListAlternateTitlesResponse
+	(*AddAlternateTitleRequest)(nil),       // 50: muxcore.media.tv.v1.AddAlternateTitleRequest
+	(*AddAlternateTitleResponse)(nil),      // 51: muxcore.media.tv.v1.AddAlternateTitleResponse
+	(*RemoveAlternateTitleRequest)(nil),    // 52: muxcore.media.tv.v1.RemoveAlternateTitleRequest
+	(*RemoveAlternateTitleResponse)(nil),   // 53: muxcore.media.tv.v1.RemoveAlternateTitleResponse
 }
 var file_proto_tvmgmtv1_tvshows_proto_depIdxs = []int32{
-	19, // 0: muxcore.media.tv.v1.ListTVShowsResponse.series:type_name -> muxcore.media.tv.v1.TVSeries
-	10, // 1: muxcore.media.tv.v1.ListMissingResponse.items:type_name -> muxcore.media.tv.v1.MissingEpisodeItem
-	19, // 2: muxcore.media.tv.v1.GetTVShowResponse.series:type_name -> muxcore.media.tv.v1.TVSeries
-	19, // 3: muxcore.media.tv.v1.UpdateTVShowResponse.series:type_name -> muxcore.media.tv.v1.TVSeries
-	20, // 4: muxcore.media.tv.v1.TVSeries.seasons:type_name -> muxcore.media.tv.v1.TVSeason
-	21, // 5: muxcore.media.tv.v1.TVSeason.episodes:type_name -> muxcore.media.tv.v1.TVEpisode
-	32, // 6: muxcore.media.tv.v1.ListTagsResponse.tags:type_name -> muxcore.media.tv.v1.Tag
-	32, // 7: muxcore.media.tv.v1.GetItemTagsResponse.tags:type_name -> muxcore.media.tv.v1.Tag
-	39, // 8: muxcore.media.tv.v1.GetCalendarResponse.items:type_name -> muxcore.media.tv.v1.CalendarItem
-	43, // 9: muxcore.media.tv.v1.ListAlternateTitlesResponse.titles:type_name -> muxcore.media.tv.v1.AlternateTitle
-	43, // 10: muxcore.media.tv.v1.AddAlternateTitleResponse.title:type_name -> muxcore.media.tv.v1.AlternateTitle
-	0,  // 11: muxcore.media.tv.v1.TvManagementService.AddTVShow:input_type -> muxcore.media.tv.v1.AddTVShowRequest
-	2,  // 12: muxcore.media.tv.v1.TvManagementService.RemoveTVShow:input_type -> muxcore.media.tv.v1.RemoveTVShowRequest
-	4,  // 13: muxcore.media.tv.v1.TvManagementService.RefreshMetadata:input_type -> muxcore.media.tv.v1.RefreshMetadataRequest
-	6,  // 14: muxcore.media.tv.v1.TvManagementService.ListTVShows:input_type -> muxcore.media.tv.v1.ListTVShowsRequest
-	8,  // 15: muxcore.media.tv.v1.TvManagementService.ListMissing:input_type -> muxcore.media.tv.v1.ListMissingRequest
-	11, // 16: muxcore.media.tv.v1.TvManagementService.GetTVShow:input_type -> muxcore.media.tv.v1.GetTVShowRequest
-	17, // 17: muxcore.media.tv.v1.TvManagementService.UpdateTVShow:input_type -> muxcore.media.tv.v1.UpdateTVShowRequest
-	13, // 18: muxcore.media.tv.v1.TvManagementService.UpdateEpisodeMonitored:input_type -> muxcore.media.tv.v1.UpdateEpisodeMonitoredRequest
-	15, // 19: muxcore.media.tv.v1.TvManagementService.UpdateSeasonMonitored:input_type -> muxcore.media.tv.v1.UpdateSeasonMonitoredRequest
-	22, // 20: muxcore.media.tv.v1.TvManagementService.AddEpisodeFile:input_type -> muxcore.media.tv.v1.AddEpisodeFileRequest
-	24, // 21: muxcore.media.tv.v1.TvManagementService.RemoveEpisodeFile:input_type -> muxcore.media.tv.v1.RemoveEpisodeFileRequest
-	26, // 22: muxcore.media.tv.v1.TvManagementService.CreateTag:input_type -> muxcore.media.tv.v1.CreateTagRequest
-	28, // 23: muxcore.media.tv.v1.TvManagementService.DeleteTag:input_type -> muxcore.media.tv.v1.DeleteTagRequest
-	30, // 24: muxcore.media.tv.v1.TvManagementService.ListTags:input_type -> muxcore.media.tv.v1.ListTagsRequest
-	33, // 25: muxcore.media.tv.v1.TvManagementService.SetItemTags:input_type -> muxcore.media.tv.v1.SetItemTagsRequest
-	35, // 26: muxcore.media.tv.v1.TvManagementService.GetItemTags:input_type -> muxcore.media.tv.v1.GetItemTagsRequest
-	37, // 27: muxcore.media.tv.v1.TvManagementService.GetCalendar:input_type -> muxcore.media.tv.v1.GetCalendarRequest
-	42, // 28: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:input_type -> muxcore.media.tv.v1.ListAlternateTitlesRequest
-	45, // 29: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:input_type -> muxcore.media.tv.v1.AddAlternateTitleRequest
-	47, // 30: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:input_type -> muxcore.media.tv.v1.RemoveAlternateTitleRequest
-	40, // 31: muxcore.media.tv.v1.TvManagementService.LookupEpisode:input_type -> muxcore.media.tv.v1.LookupEpisodeRequest
-	1,  // 32: muxcore.media.tv.v1.TvManagementService.AddTVShow:output_type -> muxcore.media.tv.v1.AddTVShowResponse
-	3,  // 33: muxcore.media.tv.v1.TvManagementService.RemoveTVShow:output_type -> muxcore.media.tv.v1.RemoveTVShowResponse
-	5,  // 34: muxcore.media.tv.v1.TvManagementService.RefreshMetadata:output_type -> muxcore.media.tv.v1.RefreshMetadataResponse
-	7,  // 35: muxcore.media.tv.v1.TvManagementService.ListTVShows:output_type -> muxcore.media.tv.v1.ListTVShowsResponse
-	9,  // 36: muxcore.media.tv.v1.TvManagementService.ListMissing:output_type -> muxcore.media.tv.v1.ListMissingResponse
-	12, // 37: muxcore.media.tv.v1.TvManagementService.GetTVShow:output_type -> muxcore.media.tv.v1.GetTVShowResponse
-	18, // 38: muxcore.media.tv.v1.TvManagementService.UpdateTVShow:output_type -> muxcore.media.tv.v1.UpdateTVShowResponse
-	14, // 39: muxcore.media.tv.v1.TvManagementService.UpdateEpisodeMonitored:output_type -> muxcore.media.tv.v1.UpdateEpisodeMonitoredResponse
-	16, // 40: muxcore.media.tv.v1.TvManagementService.UpdateSeasonMonitored:output_type -> muxcore.media.tv.v1.UpdateSeasonMonitoredResponse
-	23, // 41: muxcore.media.tv.v1.TvManagementService.AddEpisodeFile:output_type -> muxcore.media.tv.v1.AddEpisodeFileResponse
-	25, // 42: muxcore.media.tv.v1.TvManagementService.RemoveEpisodeFile:output_type -> muxcore.media.tv.v1.RemoveEpisodeFileResponse
-	27, // 43: muxcore.media.tv.v1.TvManagementService.CreateTag:output_type -> muxcore.media.tv.v1.CreateTagResponse
-	29, // 44: muxcore.media.tv.v1.TvManagementService.DeleteTag:output_type -> muxcore.media.tv.v1.DeleteTagResponse
-	31, // 45: muxcore.media.tv.v1.TvManagementService.ListTags:output_type -> muxcore.media.tv.v1.ListTagsResponse
-	34, // 46: muxcore.media.tv.v1.TvManagementService.SetItemTags:output_type -> muxcore.media.tv.v1.SetItemTagsResponse
-	36, // 47: muxcore.media.tv.v1.TvManagementService.GetItemTags:output_type -> muxcore.media.tv.v1.GetItemTagsResponse
-	38, // 48: muxcore.media.tv.v1.TvManagementService.GetCalendar:output_type -> muxcore.media.tv.v1.GetCalendarResponse
-	44, // 49: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:output_type -> muxcore.media.tv.v1.ListAlternateTitlesResponse
-	46, // 50: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:output_type -> muxcore.media.tv.v1.AddAlternateTitleResponse
-	48, // 51: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:output_type -> muxcore.media.tv.v1.RemoveAlternateTitleResponse
-	41, // 52: muxcore.media.tv.v1.TvManagementService.LookupEpisode:output_type -> muxcore.media.tv.v1.LookupEpisodeResponse
-	32, // [32:53] is the sub-list for method output_type
-	11, // [11:32] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	7,  // 0: muxcore.media.tv.v1.ListTVShowsRequest.classification_filter:type_name -> muxcore.media.tv.v1.ClassificationFilter
+	24, // 1: muxcore.media.tv.v1.ListTVShowsResponse.series:type_name -> muxcore.media.tv.v1.TVSeries
+	11, // 2: muxcore.media.tv.v1.ListMissingResponse.items:type_name -> muxcore.media.tv.v1.MissingEpisodeItem
+	24, // 3: muxcore.media.tv.v1.GetTVShowResponse.series:type_name -> muxcore.media.tv.v1.TVSeries
+	26, // 4: muxcore.media.tv.v1.GetEpisodeResponse.episode:type_name -> muxcore.media.tv.v1.TVEpisode
+	24, // 5: muxcore.media.tv.v1.UpdateTVShowResponse.series:type_name -> muxcore.media.tv.v1.TVSeries
+	25, // 6: muxcore.media.tv.v1.TVSeries.seasons:type_name -> muxcore.media.tv.v1.TVSeason
+	26, // 7: muxcore.media.tv.v1.TVSeason.episodes:type_name -> muxcore.media.tv.v1.TVEpisode
+	37, // 8: muxcore.media.tv.v1.ListTagsResponse.tags:type_name -> muxcore.media.tv.v1.Tag
+	37, // 9: muxcore.media.tv.v1.GetItemTagsResponse.tags:type_name -> muxcore.media.tv.v1.Tag
+	44, // 10: muxcore.media.tv.v1.GetCalendarResponse.items:type_name -> muxcore.media.tv.v1.CalendarItem
+	48, // 11: muxcore.media.tv.v1.ListAlternateTitlesResponse.titles:type_name -> muxcore.media.tv.v1.AlternateTitle
+	48, // 12: muxcore.media.tv.v1.AddAlternateTitleResponse.title:type_name -> muxcore.media.tv.v1.AlternateTitle
+	0,  // 13: muxcore.media.tv.v1.TvManagementService.AddTVShow:input_type -> muxcore.media.tv.v1.AddTVShowRequest
+	2,  // 14: muxcore.media.tv.v1.TvManagementService.RemoveTVShow:input_type -> muxcore.media.tv.v1.RemoveTVShowRequest
+	4,  // 15: muxcore.media.tv.v1.TvManagementService.RefreshMetadata:input_type -> muxcore.media.tv.v1.RefreshMetadataRequest
+	6,  // 16: muxcore.media.tv.v1.TvManagementService.ListTVShows:input_type -> muxcore.media.tv.v1.ListTVShowsRequest
+	9,  // 17: muxcore.media.tv.v1.TvManagementService.ListMissing:input_type -> muxcore.media.tv.v1.ListMissingRequest
+	12, // 18: muxcore.media.tv.v1.TvManagementService.GetTVShow:input_type -> muxcore.media.tv.v1.GetTVShowRequest
+	22, // 19: muxcore.media.tv.v1.TvManagementService.UpdateTVShow:input_type -> muxcore.media.tv.v1.UpdateTVShowRequest
+	18, // 20: muxcore.media.tv.v1.TvManagementService.UpdateEpisodeMonitored:input_type -> muxcore.media.tv.v1.UpdateEpisodeMonitoredRequest
+	20, // 21: muxcore.media.tv.v1.TvManagementService.UpdateSeasonMonitored:input_type -> muxcore.media.tv.v1.UpdateSeasonMonitoredRequest
+	27, // 22: muxcore.media.tv.v1.TvManagementService.AddEpisodeFile:input_type -> muxcore.media.tv.v1.AddEpisodeFileRequest
+	29, // 23: muxcore.media.tv.v1.TvManagementService.RemoveEpisodeFile:input_type -> muxcore.media.tv.v1.RemoveEpisodeFileRequest
+	31, // 24: muxcore.media.tv.v1.TvManagementService.CreateTag:input_type -> muxcore.media.tv.v1.CreateTagRequest
+	33, // 25: muxcore.media.tv.v1.TvManagementService.DeleteTag:input_type -> muxcore.media.tv.v1.DeleteTagRequest
+	35, // 26: muxcore.media.tv.v1.TvManagementService.ListTags:input_type -> muxcore.media.tv.v1.ListTagsRequest
+	38, // 27: muxcore.media.tv.v1.TvManagementService.SetItemTags:input_type -> muxcore.media.tv.v1.SetItemTagsRequest
+	40, // 28: muxcore.media.tv.v1.TvManagementService.GetItemTags:input_type -> muxcore.media.tv.v1.GetItemTagsRequest
+	42, // 29: muxcore.media.tv.v1.TvManagementService.GetCalendar:input_type -> muxcore.media.tv.v1.GetCalendarRequest
+	47, // 30: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:input_type -> muxcore.media.tv.v1.ListAlternateTitlesRequest
+	50, // 31: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:input_type -> muxcore.media.tv.v1.AddAlternateTitleRequest
+	52, // 32: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:input_type -> muxcore.media.tv.v1.RemoveAlternateTitleRequest
+	45, // 33: muxcore.media.tv.v1.TvManagementService.LookupEpisode:input_type -> muxcore.media.tv.v1.LookupEpisodeRequest
+	16, // 34: muxcore.media.tv.v1.TvManagementService.SetContentRating:input_type -> muxcore.media.tv.v1.SetContentRatingRequest
+	14, // 35: muxcore.media.tv.v1.TvManagementService.GetEpisode:input_type -> muxcore.media.tv.v1.GetEpisodeRequest
+	1,  // 36: muxcore.media.tv.v1.TvManagementService.AddTVShow:output_type -> muxcore.media.tv.v1.AddTVShowResponse
+	3,  // 37: muxcore.media.tv.v1.TvManagementService.RemoveTVShow:output_type -> muxcore.media.tv.v1.RemoveTVShowResponse
+	5,  // 38: muxcore.media.tv.v1.TvManagementService.RefreshMetadata:output_type -> muxcore.media.tv.v1.RefreshMetadataResponse
+	8,  // 39: muxcore.media.tv.v1.TvManagementService.ListTVShows:output_type -> muxcore.media.tv.v1.ListTVShowsResponse
+	10, // 40: muxcore.media.tv.v1.TvManagementService.ListMissing:output_type -> muxcore.media.tv.v1.ListMissingResponse
+	13, // 41: muxcore.media.tv.v1.TvManagementService.GetTVShow:output_type -> muxcore.media.tv.v1.GetTVShowResponse
+	23, // 42: muxcore.media.tv.v1.TvManagementService.UpdateTVShow:output_type -> muxcore.media.tv.v1.UpdateTVShowResponse
+	19, // 43: muxcore.media.tv.v1.TvManagementService.UpdateEpisodeMonitored:output_type -> muxcore.media.tv.v1.UpdateEpisodeMonitoredResponse
+	21, // 44: muxcore.media.tv.v1.TvManagementService.UpdateSeasonMonitored:output_type -> muxcore.media.tv.v1.UpdateSeasonMonitoredResponse
+	28, // 45: muxcore.media.tv.v1.TvManagementService.AddEpisodeFile:output_type -> muxcore.media.tv.v1.AddEpisodeFileResponse
+	30, // 46: muxcore.media.tv.v1.TvManagementService.RemoveEpisodeFile:output_type -> muxcore.media.tv.v1.RemoveEpisodeFileResponse
+	32, // 47: muxcore.media.tv.v1.TvManagementService.CreateTag:output_type -> muxcore.media.tv.v1.CreateTagResponse
+	34, // 48: muxcore.media.tv.v1.TvManagementService.DeleteTag:output_type -> muxcore.media.tv.v1.DeleteTagResponse
+	36, // 49: muxcore.media.tv.v1.TvManagementService.ListTags:output_type -> muxcore.media.tv.v1.ListTagsResponse
+	39, // 50: muxcore.media.tv.v1.TvManagementService.SetItemTags:output_type -> muxcore.media.tv.v1.SetItemTagsResponse
+	41, // 51: muxcore.media.tv.v1.TvManagementService.GetItemTags:output_type -> muxcore.media.tv.v1.GetItemTagsResponse
+	43, // 52: muxcore.media.tv.v1.TvManagementService.GetCalendar:output_type -> muxcore.media.tv.v1.GetCalendarResponse
+	49, // 53: muxcore.media.tv.v1.TvManagementService.ListAlternateTitles:output_type -> muxcore.media.tv.v1.ListAlternateTitlesResponse
+	51, // 54: muxcore.media.tv.v1.TvManagementService.AddAlternateTitle:output_type -> muxcore.media.tv.v1.AddAlternateTitleResponse
+	53, // 55: muxcore.media.tv.v1.TvManagementService.RemoveAlternateTitle:output_type -> muxcore.media.tv.v1.RemoveAlternateTitleResponse
+	46, // 56: muxcore.media.tv.v1.TvManagementService.LookupEpisode:output_type -> muxcore.media.tv.v1.LookupEpisodeResponse
+	17, // 57: muxcore.media.tv.v1.TvManagementService.SetContentRating:output_type -> muxcore.media.tv.v1.SetContentRatingResponse
+	15, // 58: muxcore.media.tv.v1.TvManagementService.GetEpisode:output_type -> muxcore.media.tv.v1.GetEpisodeResponse
+	36, // [36:59] is the sub-list for method output_type
+	13, // [13:36] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_proto_tvmgmtv1_tvshows_proto_init() }
@@ -3570,14 +3924,14 @@ func file_proto_tvmgmtv1_tvshows_proto_init() {
 	if File_proto_tvmgmtv1_tvshows_proto != nil {
 		return
 	}
-	file_proto_tvmgmtv1_tvshows_proto_msgTypes[17].OneofWrappers = []any{}
+	file_proto_tvmgmtv1_tvshows_proto_msgTypes[22].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_tvmgmtv1_tvshows_proto_rawDesc), len(file_proto_tvmgmtv1_tvshows_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   49,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
