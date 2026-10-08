@@ -24,6 +24,17 @@ service TvManagementService {
   rpc AddAlternateTitle(AddAlternateTitleRequest) returns (AddAlternateTitleResponse);
   rpc RemoveAlternateTitle(RemoveAlternateTitleRequest) returns (RemoveAlternateTitleResponse);
   rpc LookupEpisode(LookupEpisodeRequest) returns (LookupEpisodeResponse);
+  // SetContentRating records, replaces or clears the operator's parental
+  // classification of a series (ADR-0031 Decision 2). Seasons and episodes
+  // inherit it. No caller authorization is checked in this module: like
+  // SetItemTags, the consumer BFF restricts the call to admins.
+  rpc SetContentRating(SetContentRatingRequest) returns (SetContentRatingResponse);
+  // GetEpisode returns one episode, including the series_id of its owning
+  // series, so a caller holding only an episode id (for example
+  // /stream/tv/<episode_id>) can classify it by its series (ADR-0031
+  // Decision 2.4). Unknown ids, and episodes without an owning series, return
+  // NotFound.
+  rpc GetEpisode(GetEpisodeRequest) returns (GetEpisodeResponse);
 }
 
 message AddTVShowRequest {
@@ -37,6 +48,9 @@ message AddTVShowRequest {
   string quality_profile_id = 8;
   string root_folder_path = 9;
   string series_type = 10; // "standard", "daily", or "anime"
+  // Field 11 was used for an unauthenticated content_rating by the unmerged
+  // v0.1.21 tag (never on master). It is reserved so it is never reused.
+  reserved 11;
 }
 
 message AddTVShowResponse {
@@ -64,6 +78,27 @@ message ListTVShowsRequest {
   string sort_by = 5;
   string sort_order = 6;
   string tag_id = 7;
+  // Optional parental narrowing (ADR-0031 Decision 2.1). It can only hide
+  // series: unset or enabled=false leaves the result unchanged. When enabled,
+  // total and pagination count only the visible series.
+  ClassificationFilter classification_filter = 8;
+}
+
+// ClassificationFilter hides series a restricted principal may not see. It is
+// evaluated per ADR-0031 Decision 2.6: a series with no recorded rating
+// (unavailable) is always hidden, an explicit NR is visible only when
+// allow_unrated is set, a rated series must not exceed max_rating, a blocked
+// tag hides the series, and a non-empty allowed_tags requires one match that
+// never overrides a rating denial. Tags compare by exact case-folded match.
+// Unknown tokens or empty tags are rejected with InvalidArgument.
+message ClassificationFilter {
+  bool enabled = 1;
+  // Rating ceiling token on the ADR-0031 ladder (for example "PG-13"). Empty
+  // means no ceiling. The BFF resolves kids_mode to "PG" before calling.
+  string max_rating = 2;
+  bool allow_unrated = 3;
+  repeated string blocked_tags = 4;
+  repeated string allowed_tags = 5;
 }
 
 message ListTVShowsResponse {
@@ -107,6 +142,28 @@ message GetTVShowRequest {
 message GetTVShowResponse {
   TVSeries series = 1;
 }
+
+message GetEpisodeRequest {
+  string episode_id = 1;
+}
+
+message GetEpisodeResponse {
+  TVEpisode episode = 1;
+}
+
+message SetContentRatingRequest {
+  string series_id = 1;
+  // A rating token on the ADR-0031 ladder, for example "TV-14" or "PG-13"
+  // (case-insensitive). Empty together with explicit_unrated=false clears the
+  // operator value, returning the series to "unavailable". Unknown tokens are
+  // rejected with InvalidArgument. "NR" is not accepted here: use
+  // explicit_unrated.
+  string content_rating = 2;
+  // Records an explicit NR; content_rating must then be empty.
+  bool explicit_unrated = 3;
+}
+
+message SetContentRatingResponse {}
 
 message UpdateEpisodeMonitoredRequest {
   string episode_id = 1;
@@ -161,6 +218,21 @@ message TVSeries {
   string quality_profile_id = 24;
   string root_folder_path = 25;
   string series_type = 26; // "standard", "daily", or "anime"
+  // Field 27 was used for an unauthenticated content_rating by the unmerged
+  // v0.1.21 tag (never on master). It is reserved and never read, so that
+  // value cannot be mistaken for a classification.
+  reserved 27;
+  // Parental classification (ADR-0031 Decision 2). The series is the
+  // authority; its seasons and episodes carry no classification of their own
+  // and inherit this one. content_rating is a ladder token, or "NR" for an
+  // explicit unrated record. Empty rating with empty source means
+  // "unavailable" (nothing recorded, the state of every pre-existing series),
+  // never "unrated". A rating is never inferred: vote_average is not a rating.
+  string content_rating = 28;
+  // "operator" | "" ("tmdb" is reserved for a later slice).
+  string content_rating_source = 29;
+  // Labels of the series' operator tags, sorted, so list routes need no N+1.
+  repeated string tag_labels = 30;
 }
 
 message TVSeason {

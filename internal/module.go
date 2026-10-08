@@ -175,7 +175,9 @@ func (m *Module) Init(ctx context.Context) error {
 			root_folder_path   TEXT DEFAULT '',
 			series_type   TEXT DEFAULT 'standard',
 			created_at    TEXT NOT NULL,
-			updated_at    TEXT NOT NULL
+			updated_at    TEXT NOT NULL,
+			parental_rating        TEXT NOT NULL DEFAULT '',
+			parental_rating_source TEXT NOT NULL DEFAULT ''
 		)
 	`); err != nil {
 		_ = db.Close()
@@ -185,6 +187,13 @@ func (m *Module) Init(ctx context.Context) error {
 		`ALTER TABLE series ADD COLUMN quality_profile_id TEXT DEFAULT ''`,
 		`ALTER TABLE series ADD COLUMN root_folder_path TEXT DEFAULT ''`,
 		`ALTER TABLE series ADD COLUMN series_type TEXT DEFAULT 'standard'`,
+		// Parental classification (ADR-0031 Decision 2). Existing rows get ''/''
+		// which reads as "unavailable"; nothing is ever inferred for them. The
+		// names are deliberately not "content_rating": the unmerged v0.1.21 tag
+		// stored an unauthenticated value in that column, which must not be
+		// mistaken for an operator classification.
+		`ALTER TABLE series ADD COLUMN parental_rating TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE series ADD COLUMN parental_rating_source TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(ctx, col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			_ = db.Close()
@@ -1079,15 +1088,15 @@ func (m *Module) UpdateTVShow(ctx context.Context, req *tvmgmtv1.UpdateTVShowReq
 	if series == nil {
 		return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
 	}
+	if err := attachTagLabels(ctx, m.db, series); err != nil {
+		return nil, err
+	}
 	return &tvmgmtv1.UpdateTVShowResponse{Series: series}, nil
 }
 
 func (m *Module) getSeriesLocked(ctx context.Context, seriesID string) *tvmgmtv1.TVSeries {
 	row := m.db.QueryRowContext(ctx,
-		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
-		 status, network, first_air_date, last_air_date, vote_average, genres,
-		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		`SELECT `+seriesSelectCols+` FROM series WHERE id = ?`,
 		seriesID,
 	)
 	return m.scanSingleSeries(row)
@@ -1401,10 +1410,7 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	}
 	offset := (page - 1) * pageSize
 
-	query := `SELECT id, tmdb_id, name, original_name, year, overview, tagline,
-		status, network, first_air_date, last_air_date, vote_average, genres,
-		poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series`
+	query := `SELECT ` + seriesSelectCols + ` FROM series`
 	countQuery := `SELECT COUNT(*) FROM series`
 
 	var args []any
@@ -1423,15 +1429,23 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 		where = append(where, `id IN (SELECT item_id FROM item_tags WHERE tag_id = ?)`)
 		args = append(args, req.GetTagId())
 	}
+	cf, err := compileClassificationFilter(req.GetClassificationFilter())
+	if err != nil {
+		return nil, err
+	}
+
+	var whereClause string
 	if len(where) > 0 {
-		clause := ` WHERE ` + strings.Join(where, ` AND `)
-		query += clause
-		countQuery += clause
+		whereClause = ` WHERE ` + strings.Join(where, ` AND `)
+		query += whereClause
+		countQuery += whereClause
 	}
 
 	var total int
-	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("count series: %w", err)
+	if cf == nil {
+		if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+			return nil, fmt.Errorf("count series: %w", err)
+		}
 	}
 
 	sortBy := req.GetSortBy()
@@ -1449,23 +1463,40 @@ func (m *Module) ListTVShows(ctx context.Context, req *tvmgmtv1.ListTVShowsReque
 	if sortOrder != "desc" {
 		sortOrder = "asc"
 	}
-	query += fmt.Sprintf(` ORDER BY %s %s LIMIT ? OFFSET ?`, sortBy, sortOrder)
-	queryArgs := append(args, pageSize, offset)
-
-	rows, err := db.QueryContext(ctx, query, queryArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("query series: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
 	var seriesList []*tvmgmtv1.TVSeries
-	for rows.Next() {
-		s := m.scanSeries(rows)
-		if s != nil {
-			seriesList = append(seriesList, s)
+	if cf != nil {
+		// Enabled classification filter: total and the page count only visible
+		// series (ADR-0031 Decision 2.1).
+		seriesList, total, err = m.listVisibleSeries(ctx, db, cf, whereClause, args, sortBy+" "+sortOrder, page, pageSize)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		query += fmt.Sprintf(` ORDER BY %s %s LIMIT ? OFFSET ?`, sortBy, sortOrder)
+		queryArgs := append(args, pageSize, offset)
+
+		rows, err := db.QueryContext(ctx, query, queryArgs...)
+		if err != nil {
+			return nil, fmt.Errorf("query series: %w", err)
+		}
+		for rows.Next() {
+			s := m.scanSeries(rows)
+			if s != nil {
+				seriesList = append(seriesList, s)
+			}
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return nil, fmt.Errorf("query series: %w", err)
 		}
 	}
 
+	if cf == nil { // the filtered path attaches tag labels itself
+		if err := attachTagLabels(ctx, db, seriesList...); err != nil {
+			return nil, err
+		}
+	}
 	m.attachListHasFile(ctx, db, seriesList)
 
 	return &tvmgmtv1.ListTVShowsResponse{
@@ -1550,10 +1581,7 @@ func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) 
 	}
 
 	row := db.QueryRowContext(ctx,
-		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
-		 status, network, first_air_date, last_air_date, vote_average, genres,
-		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		`SELECT `+seriesSelectCols+` FROM series WHERE id = ?`,
 		req.GetSeriesId(),
 	)
 
@@ -1567,6 +1595,9 @@ func (m *Module) GetTVShow(ctx context.Context, req *tvmgmtv1.GetTVShowRequest) 
 		return nil, fmt.Errorf("load seasons: %w", err)
 	}
 	series.Seasons = seasons
+	if err := attachTagLabels(ctx, db, series); err != nil {
+		return nil, err
+	}
 
 	return &tvmgmtv1.GetTVShowResponse{Series: series}, nil
 }
@@ -1951,7 +1982,7 @@ func (m *Module) loadSeasons(ctx context.Context, db *sql.DB, seriesID string) (
 // ── Scan helpers ───────────────────────────────────────────────
 
 func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, ratingStored, ratingSource string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -1959,7 +1990,8 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 	err := rows.Scan(&id, &tmdbID, &name, &originalName, &year, &overview, &tagline,
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
-		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt)
+		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt,
+		&ratingStored, &ratingSource)
 	if err != nil {
 		slog.Error("scan series row", "error", err)
 		return nil
@@ -1980,6 +2012,7 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 	if seriesType == "" {
 		seriesType = "standard"
 	}
+	rating, source := trustedRating(ratingStored, ratingSource)
 
 	return &tvmgmtv1.TVSeries{
 		Id: id, TmdbId: int32(tmdbID),
@@ -1994,11 +2027,12 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 		QualityProfileId: qualityProfileID, RootFolderPath: rootFolderPath,
 		SeriesType: seriesType,
 		CreatedAt:  createdAt, UpdatedAt: updatedAt,
+		ContentRating: rating, ContentRatingSource: source,
 	}
 }
 
 func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, ratingStored, ratingSource string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -2006,7 +2040,8 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 	err := row.Scan(&id, &tmdbID, &name, &originalName, &year, &overview, &tagline,
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
-		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt)
+		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt,
+		&ratingStored, &ratingSource)
 	if err != nil {
 		return nil
 	}
@@ -2026,6 +2061,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 	if seriesType == "" {
 		seriesType = "standard"
 	}
+	rating, source := trustedRating(ratingStored, ratingSource)
 
 	return &tvmgmtv1.TVSeries{
 		Id: id, TmdbId: int32(tmdbID),
@@ -2040,6 +2076,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 		QualityProfileId: qualityProfileID, RootFolderPath: rootFolderPath,
 		SeriesType: seriesType,
 		CreatedAt:  createdAt, UpdatedAt: updatedAt,
+		ContentRating: rating, ContentRatingSource: source,
 	}
 }
 
@@ -2144,10 +2181,7 @@ func (m *Module) ListItems(ctx context.Context, req *mediaadminv1.ListItemsReque
 	}
 	offset := (page - 1) * pageSize
 
-	query := `SELECT id, tmdb_id, name, original_name, year, overview, tagline,
-		status, network, first_air_date, last_air_date, vote_average, genres,
-		poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series`
+	query := `SELECT ` + seriesSelectCols + ` FROM series`
 	countQuery := `SELECT COUNT(*) FROM series`
 
 	var args []any
@@ -2212,10 +2246,7 @@ func (m *Module) GetItem(ctx context.Context, req *mediaadminv1.GetItemRequest) 
 	}
 
 	row := db.QueryRowContext(ctx,
-		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
-		 status, network, first_air_date, last_air_date, vote_average, genres,
-		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		`SELECT `+seriesSelectCols+` FROM series WHERE id = ?`,
 		req.GetId(),
 	)
 
@@ -2280,10 +2311,7 @@ func (m *Module) UpdateMetadata(ctx context.Context, req *mediaadminv1.UpdateMet
 	}
 
 	row := m.db.QueryRowContext(ctx,
-		`SELECT id, tmdb_id, name, original_name, year, overview, tagline,
-		 status, network, first_air_date, last_air_date, vote_average, genres,
-		 poster_path, backdrop_path, monitored, total_seasons, total_episodes,
-		 quality_profile_id, root_folder_path, series_type, created_at, updated_at FROM series WHERE id = ?`,
+		`SELECT `+seriesSelectCols+` FROM series WHERE id = ?`,
 		req.GetId(),
 	)
 	series := m.scanSingleSeries(row)

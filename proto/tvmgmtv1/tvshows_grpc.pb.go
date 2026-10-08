@@ -40,6 +40,8 @@ const (
 	TvManagementService_AddAlternateTitle_FullMethodName      = "/muxcore.media.tv.v1.TvManagementService/AddAlternateTitle"
 	TvManagementService_RemoveAlternateTitle_FullMethodName   = "/muxcore.media.tv.v1.TvManagementService/RemoveAlternateTitle"
 	TvManagementService_LookupEpisode_FullMethodName          = "/muxcore.media.tv.v1.TvManagementService/LookupEpisode"
+	TvManagementService_SetContentRating_FullMethodName       = "/muxcore.media.tv.v1.TvManagementService/SetContentRating"
+	TvManagementService_GetEpisode_FullMethodName             = "/muxcore.media.tv.v1.TvManagementService/GetEpisode"
 )
 
 // TvManagementServiceClient is the client API for TvManagementService service.
@@ -67,6 +69,17 @@ type TvManagementServiceClient interface {
 	AddAlternateTitle(ctx context.Context, in *AddAlternateTitleRequest, opts ...grpc.CallOption) (*AddAlternateTitleResponse, error)
 	RemoveAlternateTitle(ctx context.Context, in *RemoveAlternateTitleRequest, opts ...grpc.CallOption) (*RemoveAlternateTitleResponse, error)
 	LookupEpisode(ctx context.Context, in *LookupEpisodeRequest, opts ...grpc.CallOption) (*LookupEpisodeResponse, error)
+	// SetContentRating records, replaces or clears the operator's parental
+	// classification of a series (ADR-0031 Decision 2). Seasons and episodes
+	// inherit it. No caller authorization is checked in this module: like
+	// SetItemTags, the consumer BFF restricts the call to admins.
+	SetContentRating(ctx context.Context, in *SetContentRatingRequest, opts ...grpc.CallOption) (*SetContentRatingResponse, error)
+	// GetEpisode returns one episode, including the series_id of its owning
+	// series, so a caller holding only an episode id (for example
+	// /stream/tv/<episode_id>) can classify it by its series (ADR-0031
+	// Decision 2.4). Unknown ids, and episodes without an owning series, return
+	// NotFound.
+	GetEpisode(ctx context.Context, in *GetEpisodeRequest, opts ...grpc.CallOption) (*GetEpisodeResponse, error)
 }
 
 type tvManagementServiceClient struct {
@@ -287,6 +300,26 @@ func (c *tvManagementServiceClient) LookupEpisode(ctx context.Context, in *Looku
 	return out, nil
 }
 
+func (c *tvManagementServiceClient) SetContentRating(ctx context.Context, in *SetContentRatingRequest, opts ...grpc.CallOption) (*SetContentRatingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetContentRatingResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_SetContentRating_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tvManagementServiceClient) GetEpisode(ctx context.Context, in *GetEpisodeRequest, opts ...grpc.CallOption) (*GetEpisodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEpisodeResponse)
+	err := c.cc.Invoke(ctx, TvManagementService_GetEpisode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TvManagementServiceServer is the server API for TvManagementService service.
 // All implementations must embed UnimplementedTvManagementServiceServer
 // for forward compatibility.
@@ -312,6 +345,17 @@ type TvManagementServiceServer interface {
 	AddAlternateTitle(context.Context, *AddAlternateTitleRequest) (*AddAlternateTitleResponse, error)
 	RemoveAlternateTitle(context.Context, *RemoveAlternateTitleRequest) (*RemoveAlternateTitleResponse, error)
 	LookupEpisode(context.Context, *LookupEpisodeRequest) (*LookupEpisodeResponse, error)
+	// SetContentRating records, replaces or clears the operator's parental
+	// classification of a series (ADR-0031 Decision 2). Seasons and episodes
+	// inherit it. No caller authorization is checked in this module: like
+	// SetItemTags, the consumer BFF restricts the call to admins.
+	SetContentRating(context.Context, *SetContentRatingRequest) (*SetContentRatingResponse, error)
+	// GetEpisode returns one episode, including the series_id of its owning
+	// series, so a caller holding only an episode id (for example
+	// /stream/tv/<episode_id>) can classify it by its series (ADR-0031
+	// Decision 2.4). Unknown ids, and episodes without an owning series, return
+	// NotFound.
+	GetEpisode(context.Context, *GetEpisodeRequest) (*GetEpisodeResponse, error)
 	mustEmbedUnimplementedTvManagementServiceServer()
 }
 
@@ -384,6 +428,12 @@ func (UnimplementedTvManagementServiceServer) RemoveAlternateTitle(context.Conte
 }
 func (UnimplementedTvManagementServiceServer) LookupEpisode(context.Context, *LookupEpisodeRequest) (*LookupEpisodeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LookupEpisode not implemented")
+}
+func (UnimplementedTvManagementServiceServer) SetContentRating(context.Context, *SetContentRatingRequest) (*SetContentRatingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetContentRating not implemented")
+}
+func (UnimplementedTvManagementServiceServer) GetEpisode(context.Context, *GetEpisodeRequest) (*GetEpisodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEpisode not implemented")
 }
 func (UnimplementedTvManagementServiceServer) mustEmbedUnimplementedTvManagementServiceServer() {}
 func (UnimplementedTvManagementServiceServer) testEmbeddedByValue()                             {}
@@ -784,6 +834,42 @@ func _TvManagementService_LookupEpisode_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TvManagementService_SetContentRating_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetContentRatingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).SetContentRating(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_SetContentRating_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).SetContentRating(ctx, req.(*SetContentRatingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TvManagementService_GetEpisode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEpisodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TvManagementServiceServer).GetEpisode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TvManagementService_GetEpisode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TvManagementServiceServer).GetEpisode(ctx, req.(*GetEpisodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TvManagementService_ServiceDesc is the grpc.ServiceDesc for TvManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -874,6 +960,14 @@ var TvManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupEpisode",
 			Handler:    _TvManagementService_LookupEpisode_Handler,
+		},
+		{
+			MethodName: "SetContentRating",
+			Handler:    _TvManagementService_SetContentRating_Handler,
+		},
+		{
+			MethodName: "GetEpisode",
+			Handler:    _TvManagementService_GetEpisode_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
