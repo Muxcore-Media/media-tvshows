@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
+	metadatav1 "github.com/Muxcore-Media/contracts-metadata/muxcore/metadata/v1"
+	"github.com/Muxcore-Media/core/sdk/go/module/meshtls"
 	tvmgmtv1 "github.com/Muxcore-Media/media-tvshows/proto/tvmgmtv1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,9 +27,20 @@ import (
 //   - unavailable: nothing recorded (the state of every pre-existing row).
 //
 // A rating is never inferred from other data: vote_average is not a rating, and
-// nothing in a metadata payload, AddTVShow, UpdateMetadata or a refresh writes
-// the rating columns. Only the operator source exists today; a "tmdb" source is
-// a later slice.
+// nothing but the two sources below writes a classification.
+//
+// Two sources exist (ADR-0031 section 2.2), stored in SEPARATE columns so one can
+// never overwrite or hide the other:
+//
+//   - operator (parental_rating, parental_rating_source): written only by
+//     SetContentRating. It always wins, whatever the timing.
+//   - tmdb (parental_rating_tmdb): the certification the metadata service
+//     reports for its one configured country, written only when a GetTVDetails
+//     call succeeds (refresh, add, import-driven season population). It is
+//     normalised to a ladder token or "NR"; anything else is stored as empty.
+//
+// The effective classification is the operator value if one is recorded, else
+// the tmdb value, else unavailable (effectiveRating).
 //
 // Authorization is NOT checked in this module. SetContentRating, like
 // SetItemTags, trusts its caller: the consumer BFF restricts both to admin or
@@ -36,6 +50,9 @@ import (
 const (
 	// contentRatingSourceOperator marks a value written by SetContentRating.
 	contentRatingSourceOperator = "operator"
+	// contentRatingSourceTMDB marks a value taken from the metadata service's
+	// TMDB certification (stored in parental_rating_tmdb).
+	contentRatingSourceTMDB = "tmdb"
 	// contentRatingNR is the stored and exposed token for an explicit unrated
 	// record. It is a state, not a rating, so it is not on the ladder.
 	contentRatingNR = "NR"
@@ -72,7 +89,58 @@ const seriesSelectCols = `id, tmdb_id, name, original_name, year, overview, tagl
 		status, network, first_air_date, last_air_date, vote_average, genres,
 		poster_path, backdrop_path, monitored, total_seasons, total_episodes,
 		quality_profile_id, root_folder_path, series_type, created_at, updated_at,
-		parental_rating, parental_rating_source`
+		parental_rating, parental_rating_source, parental_rating_tmdb`
+
+// tmdbUnratedMarkers are the certification strings TMDB (and its country
+// tables) use for "no rating"; they all normalise to the canonical NR.
+var tmdbUnratedMarkers = map[string]bool{"NR": true, "UR": true, "NOT RATED": true, "UNRATED": true}
+
+// normalizeTMDBCertification maps a raw TMDB certification string to the value
+// stored in parental_rating_tmdb: a ladder token (upper-cased), the canonical
+// "NR" for an unrated marker, or "" for everything else. Country-specific tokens
+// such as "15" or "12A", free text and the empty string are NOT ratings this
+// module can place on the ladder, so they yield "" (unavailable). Nothing is
+// inferred or approximated.
+func normalizeTMDBCertification(raw string) string {
+	token := strings.ToUpper(strings.TrimSpace(raw))
+	if _, ok := ratingLevel(token); ok {
+		return token
+	}
+	if tmdbUnratedMarkers[token] {
+		return contentRatingNR
+	}
+	return ""
+}
+
+// trustedTMDBRating returns the stored tmdb value when it is one this module
+// would have written (a ladder token or "NR"); a hand-edited value reads as "".
+func trustedTMDBRating(stored string) string {
+	stored = strings.ToUpper(strings.TrimSpace(stored))
+	if _, ok := ratingLevel(stored); ok || stored == contentRatingNR {
+		return stored
+	}
+	return ""
+}
+
+// effectiveRating resolves the classification a series is exposed with:
+//
+//  1. an operator record (any non-empty operator rating or source) decides, and
+//     if that record is not a value this module would have written the result is
+//     unavailable -- a tampered operator row never falls through to a weaker
+//     source and never widens access;
+//  2. otherwise the tmdb value, if valid, with source "tmdb";
+//  3. otherwise unavailable ("", "").
+//
+// An operator "NR" is a record like any other, so it beats a tmdb rating.
+func effectiveRating(opRating, opSource, tmdbStored string) (rating, source string) {
+	if opRating != "" || opSource != "" {
+		return trustedRating(opRating, opSource)
+	}
+	if r := trustedTMDBRating(tmdbStored); r != "" {
+		return r, contentRatingSourceTMDB
+	}
+	return "", ""
+}
 
 // trustedRating returns the stored rating and source when they are a value this
 // module would have written (source "operator", and "NR" or a ladder token).
@@ -89,11 +157,52 @@ func trustedRating(rating, source string) (string, string) {
 	return "", ""
 }
 
+// metadataClientFactory returns a metadata client and a function that releases
+// it. Production discovers the metadata module and dials it; tests install a fake
+// through Module.metadataClientOverride.
+type metadataClientFactory func(ctx context.Context) (metadatav1.MetadataServiceClient, func(), error)
+
+// metadataClient returns a client for the metadata service and a close function
+// that is always safe to call when err is nil.
+func (m *Module) metadataClient(ctx context.Context) (metadatav1.MetadataServiceClient, func(), error) {
+	if f := m.metadataClientOverride.Load(); f != nil {
+		return (*f)(ctx)
+	}
+	metaAddr, err := m.findMetadataModule(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := meshtls.Dial(metaAddr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("dial metadata: %w", err)
+	}
+	return metadatav1.NewMetadataServiceClient(conn), func() { _ = conn.Close() }, nil
+}
+
+// storeTMDBRating records the tmdb classification from a SUCCESSFUL GetTVDetails
+// response, replacing or clearing the previous value: a certification that is
+// empty or does not map onto the ladder clears it. It writes only
+// parental_rating_tmdb, in one statement, so it cannot overwrite or hide an
+// operator classification whatever it races with. Callers must not call it for
+// a failed metadata call (the stored value is kept then).
+func (m *Module) storeTMDBRating(ctx context.Context, seriesID string, details *metadatav1.GetTVDetailsResponse) {
+	db := m.dbConn()
+	if db == nil {
+		return
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE series SET parental_rating_tmdb = ? WHERE id = ?`,
+		normalizeTMDBCertification(details.GetCertification()), seriesID); err != nil {
+		slog.Warn("store tmdb content rating", "series_id", seriesID, "error", err)
+	}
+}
+
 // SetContentRating records, replaces or clears the operator classification of a
 // series. It stores source "operator". A ladder token records a rating;
 // explicit_unrated records an explicit NR; an empty rating without
-// explicit_unrated clears the operator value, returning the series to
-// "unavailable". Unknown tokens are rejected with InvalidArgument and an
+// explicit_unrated clears the operator value, returning the series to its tmdb
+// classification if it has one and otherwise to "unavailable". It only ever
+// touches the operator columns. Unknown tokens are rejected with InvalidArgument and an
 // unknown series with NotFound.
 //
 // No admin/role check happens here (see the comment at the top of this file).
@@ -321,18 +430,18 @@ func (cf *classificationFilter) visible(rating string, tagLabels []string) bool 
 func (m *Module) listVisibleSeries(ctx context.Context, db *sql.DB, cf *classificationFilter, where string, args []any, orderBy string, page, pageSize int) ([]*tvmgmtv1.TVSeries, int, error) {
 	type candidate struct{ id, rating string }
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, parental_rating, parental_rating_source FROM series`+where+` ORDER BY `+orderBy, args...)
+		`SELECT id, parental_rating, parental_rating_source, parental_rating_tmdb FROM series`+where+` ORDER BY `+orderBy, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query series: %w", err)
 	}
 	var cands []candidate
 	for rows.Next() {
-		var id, rating, source string
-		if err := rows.Scan(&id, &rating, &source); err != nil {
+		var id, rating, source, tmdb string
+		if err := rows.Scan(&id, &rating, &source, &tmdb); err != nil {
 			_ = rows.Close()
 			return nil, 0, fmt.Errorf("scan series: %w", err)
 		}
-		rating, _ = trustedRating(rating, source)
+		rating, _ = effectiveRating(rating, source, tmdb)
 		cands = append(cands, candidate{id: id, rating: rating})
 	}
 	err = rows.Err()

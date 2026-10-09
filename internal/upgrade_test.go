@@ -14,7 +14,15 @@ import (
 
 // upgradeSnapshots lists committed snapshots produced by the named tag's own
 // code (ADR-0015). See testdata/upgrade/README.md.
-var upgradeSnapshots = []string{"v0.1.9", "v0.1.20"}
+var upgradeSnapshots = []string{"v0.1.9", "v0.1.20", "v0.1.23"}
+
+// upgradeOperatorRatings lists the operator classifications a snapshot holds
+// (series id -> rating). Snapshots absent here predate parental_rating* and every
+// series upgrades as unavailable. v0.1.23's seed records ser_1 as TV-14 through
+// that tag's own SetContentRating (see seed_upgrade_test.v0.1.23.go.txt).
+var upgradeOperatorRatings = map[string]map[string]string{
+	"v0.1.23": {"ser_1": "TV-14"},
+}
 
 func openUpgradeModule(t *testing.T, dbPath string) *Module {
 	t.Helper()
@@ -72,7 +80,7 @@ func TestUpgradeFromSnapshots(t *testing.T) {
 				upSchema := moduletest.Schema(t, db)
 				moduletest.RequireSchemaSuperset(t, upSchema, freshSchema)
 				requireColumnDefaults(t, upSchema, freshSchema)
-				requireSeededRows(t, ctx, m)
+				requireSeededRows(t, ctx, m, upgradeOperatorRatings[tag])
 				moduletest.RequireIntegrity(t, db)
 				closeUpgradeModule(t, m)
 			}
@@ -104,7 +112,7 @@ func requireColumnDefaults(t *testing.T, upgraded, fresh moduletest.SchemaInfo) 
 	}
 }
 
-func requireSeededRows(t *testing.T, ctx context.Context, m *Module) {
+func requireSeededRows(t *testing.T, ctx context.Context, m *Module, wantOperator map[string]string) {
 	t.Helper()
 	db := m.dbConn()
 
@@ -166,7 +174,7 @@ func requireSeededRows(t *testing.T, ctx context.Context, m *Module) {
 		t.Errorf("ser_2 mismatch: %+v", s)
 	}
 
-	requireUnavailableClassification(t, ctx, m)
+	requireClassification(t, ctx, m, wantOperator)
 
 	// episode files (personal paths)
 	for ep, want := range map[string]string{
@@ -233,17 +241,25 @@ func requireSeededRows(t *testing.T, ctx context.Context, m *Module) {
 	}
 }
 
-// requireUnavailableClassification asserts the ADR-0031 migration contract: a
-// pre-existing database has no parental classification, every series reads as
-// "unavailable" (empty rating, empty source), nothing is inferred from other
-// data (ser_1 has vote_average 8.9 and a "kids-ok" tag), episodes still resolve
-// to their series, and an enabled filter shows none of them.
-func requireUnavailableClassification(t *testing.T, ctx context.Context, m *Module) {
+// requireClassification asserts the ADR-0031 migration contract: a
+// pre-existing database keeps exactly the operator classifications it holds
+// (wantOperator, series id -> rating; empty for snapshots that predate
+// parental_rating*) and every other series reads as "unavailable" (empty rating,
+// empty source) -- the new tmdb column defaults to empty, and nothing is inferred
+// from other data (ser_1 has vote_average 8.9 and a "kids-ok" tag). Episodes
+// still resolve to their series, and an enabled filter shows only the rated ones.
+func requireClassification(t *testing.T, ctx context.Context, m *Module, wantOperator map[string]string) {
 	t.Helper()
 
 	wantLabels := map[string][]string{
 		"ser_1": {"favorites", "kids-ok"},
 		"ser_2": {"favorites"},
+	}
+	wantClass := func(id string) (string, string) {
+		if r := wantOperator[id]; r != "" {
+			return r, "operator"
+		}
+		return "", ""
 	}
 	list, err := m.ListTVShows(ctx, &tvmgmtv1.ListTVShowsRequest{})
 	if err != nil {
@@ -253,8 +269,9 @@ func requireUnavailableClassification(t *testing.T, ctx context.Context, m *Modu
 		t.Fatalf("list total=%d len=%d, want 2", list.GetTotal(), len(list.GetSeries()))
 	}
 	for _, s := range list.GetSeries() {
-		if s.GetContentRating() != "" || s.GetContentRatingSource() != "" {
-			t.Errorf("%s: rating=%q source=%q, want unavailable (empty, empty)", s.GetId(), s.GetContentRating(), s.GetContentRatingSource())
+		wr, ws := wantClass(s.GetId())
+		if s.GetContentRating() != wr || s.GetContentRatingSource() != ws {
+			t.Errorf("%s: rating=%q source=%q, want %q/%q", s.GetId(), s.GetContentRating(), s.GetContentRatingSource(), wr, ws)
 		}
 		if got := s.GetTagLabels(); !slices.Equal(got, wantLabels[s.GetId()]) {
 			t.Errorf("%s: tag_labels = %v, want %v", s.GetId(), got, wantLabels[s.GetId()])
@@ -265,9 +282,10 @@ func requireUnavailableClassification(t *testing.T, ctx context.Context, m *Modu
 	if err != nil {
 		t.Fatalf("GetTVShow ser_1: %v", err)
 	}
-	if s := got.GetSeries(); s.GetContentRating() != "" || s.GetContentRatingSource() != "" ||
+	wr, ws := wantClass("ser_1")
+	if s := got.GetSeries(); s.GetContentRating() != wr || s.GetContentRatingSource() != ws ||
 		!slices.Equal(s.GetTagLabels(), wantLabels["ser_1"]) {
-		t.Errorf("ser_1 detail classification = %q/%q/%v", s.GetContentRating(), s.GetContentRatingSource(), s.GetTagLabels())
+		t.Errorf("ser_1 detail classification = %q/%q/%v, want %q/%q", s.GetContentRating(), s.GetContentRatingSource(), s.GetTagLabels(), wr, ws)
 	}
 
 	for ep, series := range map[string]string{"ep_1": "ser_1", "ep_3": "ser_1", "ep_4": "ser_2"} {
@@ -284,7 +302,12 @@ func requireUnavailableClassification(t *testing.T, ctx context.Context, m *Modu
 	if err != nil {
 		t.Fatalf("ListTVShows filtered: %v", err)
 	}
-	if filtered.GetTotal() != 0 || len(filtered.GetSeries()) != 0 {
-		t.Errorf("filter over upgraded db: total=%d len=%d, want 0 (all unavailable)", filtered.GetTotal(), len(filtered.GetSeries()))
+	if int(filtered.GetTotal()) != len(wantOperator) || len(filtered.GetSeries()) != len(wantOperator) {
+		t.Errorf("filter over upgraded db: total=%d len=%d, want %d (only the operator-rated)", filtered.GetTotal(), len(filtered.GetSeries()), len(wantOperator))
+	}
+	for _, s := range filtered.GetSeries() {
+		if wantOperator[s.GetId()] == "" {
+			t.Errorf("%s visible through the filter but is unavailable", s.GetId())
+		}
 	}
 }
