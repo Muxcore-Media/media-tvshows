@@ -60,6 +60,9 @@ type Module struct {
 	rootsListFn func(ctx context.Context, mediaKind string) ([]string, error)
 	// automationSearchFn overrides mesh automation SearchItem for tests.
 	automationSearchFn func(ctx context.Context, req *automationv1.SearchItemRequest) (*automationv1.SearchItemResponse, error)
+	// metadataClientOverride replaces mesh discovery + dial in metadataClient for
+	// tests. It is atomic because background work started by AddTVShow reads it.
+	metadataClientOverride atomic.Pointer[metadataClientFactory]
 }
 
 type Config struct {
@@ -137,7 +140,7 @@ func (m *Module) Init(ctx context.Context) error {
 		return fmt.Errorf("create image directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", m.dbPath)
+	db, err := sql.Open("sqlite", m.sqliteDSN())
 	if err != nil {
 		return fmt.Errorf("open sqlite: %w", err)
 	}
@@ -177,7 +180,8 @@ func (m *Module) Init(ctx context.Context) error {
 			created_at    TEXT NOT NULL,
 			updated_at    TEXT NOT NULL,
 			parental_rating        TEXT NOT NULL DEFAULT '',
-			parental_rating_source TEXT NOT NULL DEFAULT ''
+			parental_rating_source TEXT NOT NULL DEFAULT '',
+			parental_rating_tmdb   TEXT NOT NULL DEFAULT ''
 		)
 	`); err != nil {
 		_ = db.Close()
@@ -194,6 +198,10 @@ func (m *Module) Init(ctx context.Context) error {
 		// mistaken for an operator classification.
 		`ALTER TABLE series ADD COLUMN parental_rating TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE series ADD COLUMN parental_rating_source TEXT NOT NULL DEFAULT ''`,
+		// TMDB certification (ADR-0031 section 2.2), kept apart from the operator
+		// columns above so a metadata refresh can never overwrite or hide an
+		// operator classification. '' reads as "no tmdb value".
+		`ALTER TABLE series ADD COLUMN parental_rating_tmdb TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(ctx, col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			_ = db.Close()
@@ -1184,18 +1192,15 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 		return nil, fmt.Errorf("series not found: %s", req.GetSeriesId())
 	}
 
-	metaAddr, err := m.findMetadataModule(ctx)
+	metaClient, closeMeta, err := m.metadataClient(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defer closeMeta()
 
-	conn, err := meshtls.Dial(metaAddr)
-	if err != nil {
-		return nil, fmt.Errorf("dial metadata: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	metaClient := metadatav1.NewMetadataServiceClient(conn)
+	// A failed call returns here, before anything is written, so the previously
+	// stored tmdb rating survives an outage. Only a successful call may replace
+	// or clear it (below).
 	details, err := metaClient.GetTVDetails(ctx, &metadatav1.GetTVDetailsRequest{
 		Id: tmdbID,
 	})
@@ -1216,13 +1221,14 @@ func (m *Module) RefreshMetadata(ctx context.Context, req *tvmgmtv1.RefreshMetad
 	}
 
 	_, err = db.ExecContext(ctx,
-		`UPDATE series SET name=?, original_name=?, year=?, overview=?, tagline=?, status=?, first_air_date=?, last_air_date=?, vote_average=?, genres=?, poster_path=?, backdrop_path=?, total_seasons=?, total_episodes=?, updated_at=? WHERE id=?`,
+		`UPDATE series SET name=?, original_name=?, year=?, overview=?, tagline=?, status=?, first_air_date=?, last_air_date=?, vote_average=?, genres=?, poster_path=?, backdrop_path=?, total_seasons=?, total_episodes=?, parental_rating_tmdb=?, updated_at=? WHERE id=?`,
 		details.GetName(), details.GetOriginalName(), extractYear(details.GetFirstAirDate()),
 		details.GetOverview(), details.GetTagline(), details.GetStatus(),
 		details.GetFirstAirDate(), details.GetLastAirDate(),
 		details.GetVoteAverage(), string(genresJSON),
 		details.GetPosterPath(), details.GetBackdropPath(),
 		details.GetNumberOfSeasons(), details.GetNumberOfEpisodes(),
+		normalizeTMDBCertification(details.GetCertification()),
 		now, req.GetSeriesId(),
 	)
 	if err == nil {
@@ -1367,28 +1373,23 @@ func extractYear(dateStr string) int32 {
 }
 
 func (m *Module) populateSeasonsFromMetadata(ctx context.Context, seriesID string, tmdbID int32) {
-	metaAddr, err := m.findMetadataModule(ctx)
-	if err != nil {
-		slog.Debug("no metadata module for season population", "series", seriesID)
-		return
-	}
-
-	conn, err := meshtls.Dial(metaAddr)
+	metaClient, closeMeta, err := m.metadataClient(ctx)
 	if err != nil {
 		slog.Debug("dial metadata for season population", "error", err)
 		return
 	}
-	defer func() { _ = conn.Close() }()
+	defer closeMeta()
 
-	metaClient := metadatav1.NewMetadataServiceClient(conn)
 	details, err := metaClient.GetTVDetails(ctx, &metadatav1.GetTVDetailsRequest{
 		Id: tmdbID,
 	})
 	if err != nil {
+		// Keep any stored tmdb rating: an errored call says nothing about it.
 		slog.Debug("fetch tv details for season population", "error", err)
 		return
 	}
 
+	m.storeTMDBRating(ctx, seriesID, details)
 	m.populateSeasonsFromDB(ctx, seriesID, details)
 	m.populateEpisodesFromMetadata(ctx, metaClient, seriesID, tmdbID, details)
 	m.renumberAbsoluteEpisodes(ctx, seriesID)
@@ -1982,7 +1983,7 @@ func (m *Module) loadSeasons(ctx context.Context, db *sql.DB, seriesID string) (
 // ── Scan helpers ───────────────────────────────────────────────
 
 func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, ratingStored, ratingSource string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, ratingStored, ratingSource, ratingTMDB string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -1991,7 +1992,7 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
 		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt,
-		&ratingStored, &ratingSource)
+		&ratingStored, &ratingSource, &ratingTMDB)
 	if err != nil {
 		slog.Error("scan series row", "error", err)
 		return nil
@@ -2012,7 +2013,7 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 	if seriesType == "" {
 		seriesType = "standard"
 	}
-	rating, source := trustedRating(ratingStored, ratingSource)
+	rating, source := effectiveRating(ratingStored, ratingSource, ratingTMDB)
 
 	return &tvmgmtv1.TVSeries{
 		Id: id, TmdbId: int32(tmdbID),
@@ -2032,7 +2033,7 @@ func (m *Module) scanSeries(rows *sql.Rows) *tvmgmtv1.TVSeries {
 }
 
 func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
-	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, ratingStored, ratingSource string
+	var id, name, originalName, overview, tagline, status, network, firstAir, lastAir, genresStr, posterPath, backdropPath, qualityProfileID, rootFolderPath, seriesType, createdAt, updatedAt, ratingStored, ratingSource, ratingTMDB string
 	var tmdbID, year, totalSeasons, totalEpisodes int64
 	var voteAvg float64
 	var monitored int
@@ -2041,7 +2042,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 		&status, &network, &firstAir, &lastAir, &voteAvg, &genresStr,
 		&posterPath, &backdropPath, &monitored, &totalSeasons, &totalEpisodes,
 		&qualityProfileID, &rootFolderPath, &seriesType, &createdAt, &updatedAt,
-		&ratingStored, &ratingSource)
+		&ratingStored, &ratingSource, &ratingTMDB)
 	if err != nil {
 		return nil
 	}
@@ -2061,7 +2062,7 @@ func (m *Module) scanSingleSeries(row *sql.Row) *tvmgmtv1.TVSeries {
 	if seriesType == "" {
 		seriesType = "standard"
 	}
-	rating, source := trustedRating(ratingStored, ratingSource)
+	rating, source := effectiveRating(ratingStored, ratingSource, ratingTMDB)
 
 	return &tvmgmtv1.TVSeries{
 		Id: id, TmdbId: int32(tmdbID),

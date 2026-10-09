@@ -37,6 +37,23 @@ Admin UI / clients ──→ media-tvshows ──→ SQLite (series, seasons, ep
 - **Flat MediaAdminService model** — each series appears as a `MediaItem` with metadata fields (season count, episode count, status, network, vote average)
 - **TV-specific management API** — `TvManagementService` for library CRUD, monitoring, files, tags, calendar, titles, and lookup
 
+### Content rating (parental classification)
+
+Each series exposes `content_rating` and `content_rating_source` on `TVSeries` (ADR-0031 section 2). Seasons and episodes carry none of their own: they inherit the series' (`GetEpisode` maps an episode id to its series). Two sources exist, in strict precedence:
+
+| Source | Set by | Wins |
+|--------|--------|------|
+| `operator` | `SetContentRating` (the BFF restricts it to admin/manager). A ladder token, or an explicit `NR`. | Always, whatever the timing |
+| `tmdb` | A successful metadata `GetTVDetails` (refresh, add, import-driven season population): the TMDB certification of the metadata service's one configured country | Only when no operator value is recorded |
+| none | | The series is **unavailable** (never visible when a classification filter is enabled) |
+
+Rules:
+
+- The TMDB certification is accepted only if it is a ladder token (`G`, `TV-Y`, `TV-Y7`, `TV-Y7-FV`, `ALL`, `E`, `PG`, `TV-G`, `TV-PG`, `E10+`, `PG-13`, `TV-14`, `T`, `R`, `TV-MA`, `M`, `MA`, `NC-17`, `AO`, `X`) or an unrated marker (`NR`, `UR`, `NOT RATED`, `UNRATED`, stored as `NR`). Country tokens such as `15` or `12A`, free text and empty values are not mapped: the series simply has no tmdb value. Nothing is inferred from other data.
+- The tmdb value lives in its own column (`parental_rating_tmdb`). A refresh never touches the operator columns; clearing the operator value (`SetContentRating` with an empty rating) falls back to the tmdb value; an explicit operator `NR` beats a tmdb rating.
+- A refresh that **succeeds** replaces the tmdb value, and clears it when the certification is empty or unmappable. A refresh that **fails** keeps the stored value.
+- Acquisition stays fixture-only (ADR-0008): the metadata service is the only source of certifications, and tests use a fake metadata client.
+
 ---
 
 ## Configuration

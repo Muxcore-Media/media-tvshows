@@ -328,7 +328,8 @@ func TestRatingNeverInferredOrWrittenByOtherPaths(t *testing.T) {
 	}
 
 	// Hand-edited or foreign rows never count: wrong source, unknown token,
-	// and a tmdb source that no code path writes yet all read as unavailable.
+	// and a "tmdb" source in the operator columns (the tmdb value lives in
+	// parental_rating_tmdb) all read as unavailable.
 	for _, tc := range []struct{ rating, source string }{
 		{"TV-MA", ""}, {"TV-MA", "tmdb"}, {"TV-MA", "other"}, {"15", "operator"}, {"UR", "operator"}, {"", "operator"},
 	} {

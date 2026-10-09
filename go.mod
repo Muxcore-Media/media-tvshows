@@ -5,7 +5,7 @@ go 1.26.6
 require (
 	github.com/Muxcore-Media/contracts-automation v0.1.1
 	github.com/Muxcore-Media/contracts-media-admin v0.1.1
-	github.com/Muxcore-Media/contracts-metadata v0.2.0
+	github.com/Muxcore-Media/contracts-metadata v0.2.1
 	github.com/Muxcore-Media/core v0.6.14
 	github.com/Muxcore-Media/core/pkg/contracts v0.6.0
 	github.com/Muxcore-Media/core/sdk/go/client v0.6.1

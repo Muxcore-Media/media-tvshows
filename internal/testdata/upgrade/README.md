@@ -4,6 +4,8 @@
 |------|-------------|-------|
 | `v0.1.20.db` | `media-tvshows` tag `v0.1.20` (the release this slice upgrades from, ADR-0015 section 4) | same seed; schema identical to v0.1.9, rows predate `parental_rating*` so every series upgrades as "unavailable" (ADR-0031) |
 | `v0.1.20.schema.sql` | `sqlite3 v0.1.20.db .schema` | schema of that tag |
+| `v0.1.23.db` | `media-tvshows` tag `v0.1.23` (the release this slice upgrades from; has `parental_rating*`, no `parental_rating_tmdb`) | same seed plus one operator rating written by that tag's own `SetContentRating` (`ser_1` = `TV-14`, `ser_2` unavailable); seed `seed_upgrade_test.v0.1.23.go.txt` |
+| `v0.1.23.schema.sql` | `sqlite3 v0.1.23.db .schema` | schema of that tag |
 | `v0.1.9.db` | `media-tvshows` tag `v0.1.9` (previous release-train version, and the tag before the latest tag `v0.1.13`) | `Init` of that tag creates the schema; rows seeded by `seed_upgrade_test.go.txt` |
 | `v0.1.9.schema.sql` | `sqlite3 v0.1.9.db .schema` | schema of that tag |
 | `seed_upgrade_test.go.txt` | seed test (build tag `upgradeseed`), stored as `.txt` so it does not compile here | |
@@ -27,6 +29,7 @@ The database is stored in rollback-journal mode (single file); the module
 switches it to WAL on open.
 
 `v0.1.20.db` was produced with `scripts/upgrade-fixtures/snapshot.sh <module> v0.1.20 internal`.
+`v0.1.23.db` was produced with `scripts/upgrade-fixtures/snapshot.sh <module> v0.1.23 internal` (the script picks `seed_upgrade_test.v0.1.23.go.txt`), then re-vacuumed with `page_size=1024` to match the other snapshots.
 
 ## Seed summary
 

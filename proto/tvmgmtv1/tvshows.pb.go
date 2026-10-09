@@ -1038,9 +1038,9 @@ type SetContentRatingRequest struct {
 	SeriesId string                 `protobuf:"bytes,1,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
 	// A rating token on the ADR-0031 ladder, for example "TV-14" or "PG-13"
 	// (case-insensitive). Empty together with explicit_unrated=false clears the
-	// operator value, returning the series to "unavailable". Unknown tokens are
-	// rejected with InvalidArgument. "NR" is not accepted here: use
-	// explicit_unrated.
+	// operator value, returning the series to its tmdb classification if it has
+	// one and otherwise to "unavailable". Unknown tokens are rejected with
+	// InvalidArgument. "NR" is not accepted here: use explicit_unrated.
 	ContentRating string `protobuf:"bytes,2,opt,name=content_rating,json=contentRating,proto3" json:"content_rating,omitempty"`
 	// Records an explicit NR; content_rating must then be empty.
 	ExplicitUnrated bool `protobuf:"varint,3,opt,name=explicit_unrated,json=explicitUnrated,proto3" json:"explicit_unrated,omitempty"`
@@ -1466,7 +1466,9 @@ type TVSeries struct {
 	// "unavailable" (nothing recorded, the state of every pre-existing series),
 	// never "unrated". A rating is never inferred: vote_average is not a rating.
 	ContentRating string `protobuf:"bytes,28,opt,name=content_rating,json=contentRating,proto3" json:"content_rating,omitempty"`
-	// "operator" | "" ("tmdb" is reserved for a later slice).
+	// "operator" | "tmdb" | "". An operator value always wins; "tmdb" is the
+	// metadata service's certification for its one configured country, used only
+	// when no operator value is recorded (ADR-0031 section 2.2).
 	ContentRatingSource string `protobuf:"bytes,29,opt,name=content_rating_source,json=contentRatingSource,proto3" json:"content_rating_source,omitempty"`
 	// Labels of the series' operator tags, sorted, so list routes need no N+1.
 	TagLabels     []string `protobuf:"bytes,30,rep,name=tag_labels,json=tagLabels,proto3" json:"tag_labels,omitempty"`
