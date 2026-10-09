@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.24] - 2026-10-09
 
 ### Added
 - TMDB content-rating source (ADR-0031 section 2.2, roadmap T-M4-01 slice S4c). Requires `contracts-metadata` v0.2.1 (bumped from v0.2.0), whose `GetTVDetailsResponse` carries `certification` and `certification_country`.
