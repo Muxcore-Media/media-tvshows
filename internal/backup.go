@@ -37,7 +37,7 @@ func (m *Module) ImportState(ctx context.Context, data []byte) error {
 	if err := os.WriteFile(m.dbPath, data, 0600); err != nil {
 		return fmt.Errorf("write db: %w", err)
 	}
-	db, err := sql.Open("sqlite", m.dbPath)
+	db, err := sql.Open("sqlite", m.sqliteDSN())
 	if err != nil {
 		return fmt.Errorf("reopen sqlite: %w", err)
 	}

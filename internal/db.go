@@ -14,3 +14,12 @@ func (m *Module) dbConn() *sql.DB {
 	m.mu.RUnlock()
 	return db
 }
+
+// sqliteDSN is the database path with busy_timeout applied to EVERY pooled
+// connection. The pool opens up to sqliteMaxOpenConns connections and a PRAGMA
+// only affects the one it runs on, so without this a second connection fails
+// instantly with SQLITE_BUSY while another writes (for example SetContentRating
+// racing a metadata refresh).
+func (m *Module) sqliteDSN() string {
+	return m.dbPath + "?_pragma=busy_timeout(5000)"
+}
