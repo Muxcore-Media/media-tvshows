@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- TMDB content-rating source (ADR-0031 section 2.2, roadmap T-M4-01 slice S4c). Requires `contracts-metadata` v0.2.1 (bumped from v0.2.0), whose `GetTVDetailsResponse` carries `certification` and `certification_country`.
+  - `series.parental_rating_tmdb` (`TEXT NOT NULL DEFAULT ''`) stores the TMDB value **separately** from the operator columns, so a metadata call can never overwrite or hide an operator classification.
+  - The raw certification is trimmed and upper-cased and accepted only if it is an ADR-0031 ladder token or an unrated marker (`NR`, `UR`, `NOT RATED`, `UNRATED` become `NR`). Country tokens (`15`, `12A`), free text and the empty string store nothing. Nothing is inferred from any other data.
+  - Written only by a **successful** `GetTVDetails`: `RefreshMetadata`, and the season population run after `AddTVShow` and on import. A successful call with an empty or unmappable certification clears the value; a call that errors (or a metadata module that cannot be reached) keeps the previously stored value.
+  - Effective classification: the operator value if one is recorded (including an explicit operator `NR`), else the tmdb value, else unavailable. `content_rating_source` is `operator` or `tmdb`. `SetContentRating` with an empty rating clears only the operator value and falls back to the tmdb value if present. An operator record that is not a value this module would write reads as unavailable and does not fall through to tmdb. A tampered tmdb value reads as unavailable.
+  - Lists, `GetTVShow`, `UpdateTVShow` and the classification filter all use the effective classification (the filter's `visible()` rules are unchanged: unavailable is never visible). Episodes still inherit the series via `GetEpisode`.
+- Upgrade snapshot `testdata/upgrade/v0.1.23.db` (ADR-0015), produced by the v0.1.23 tag's own code with one operator-rated series; `TestUpgradeFromSnapshots` and `TestUpgradeThenTMDBRating` cover the upgrade.
+
+### Changed
+- Startup migration (forward-only, idempotent): `series.parental_rating_tmdb` is added with `ALTER TABLE`. Existing rows have no tmdb value and keep their operator classification.
+- `busy_timeout(5000)` is now set in the SQLite DSN so every pooled connection has it. Previously only the first connection did, so a second connection could fail immediately with `SQLITE_BUSY` (for example `SetContentRating` racing a metadata refresh).
+
 ## [0.1.23] - 2026-10-08
 
 Version skips v0.1.22 (and, for media-tvshows, v0.1.21): tags with those numbers exist on unmerged branches that add an unauthenticated `content_rating` and are not part of this history.
