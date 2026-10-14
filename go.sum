@@ -2,8 +2,6 @@ github.com/Muxcore-Media/contracts-automation v0.1.1 h1:ligA8uWK3X46jIItwinfQ+0Y
 github.com/Muxcore-Media/contracts-automation v0.1.1/go.mod h1:HWpgvkMDZwf/2YFAndQ9NDTkynEtnRML4SOuZ6/SRNE=
 github.com/Muxcore-Media/contracts-media-admin v0.1.1 h1:XeOQtbg7O+fF/3Wb8Ok7+Uz2SlnYcoATIKGqrCrSgmk=
 github.com/Muxcore-Media/contracts-media-admin v0.1.1/go.mod h1:FnXzE5nlrbgdRdlSiQlJ/xW6bJh5WWf+J2Q6BcOPp5M=
-github.com/Muxcore-Media/contracts-metadata v0.2.0 h1:WBBwCpkz4KN4ilj1MOxf9MH1I91xtojDE/FDfnSzITw=
-github.com/Muxcore-Media/contracts-metadata v0.2.0/go.mod h1:z1q8wH0cRsngXYxoWI/MCuV99oGROQrco5FygHlAp1s=
 github.com/Muxcore-Media/contracts-metadata v0.2.1 h1:TETuZMeesmoz+w6Fs1Yd17qoqAHl/4uggVnfuNwjKwA=
 github.com/Muxcore-Media/contracts-metadata v0.2.1/go.mod h1:z1q8wH0cRsngXYxoWI/MCuV99oGROQrco5FygHlAp1s=
 github.com/Muxcore-Media/core v0.6.14 h1:txrjE0arrInXP1LVPC3dPRReehexEqmPRMVtM66rSPQ=
@@ -71,8 +69,8 @@ google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad h1:
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad/go.mod h1:4Hqkh8ycfw05ld/3BWL7rJOSfebL2Q+DVDeRgYgxUU8=
 google.golang.org/grpc v1.83.2 h1:EManeRomTObA0BU7I8vXgg/78uE5MJ9M8B39EX2WscU=
 google.golang.org/grpc v1.83.2/go.mod h1:YPI1hK3kDked6iHvgX3tR0y+nX/qpMFKhPgFsokw1S8=
-google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
-google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
+google.golang.org/protobuf v1.36.12 h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=
+google.golang.org/protobuf v1.36.12/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 modernc.org/cc/v4 v4.29.0 h1:CXgwL8cvxmyzBQZzbSl/6xFtMCryb6u8IOqDci39cgc=
 modernc.org/cc/v4 v4.29.0/go.mod h1:OnovgIhbbMXMu1aISnJ0wvVD1KnW+cAUJkIrAWh+kVI=
 modernc.org/ccgo/v4 v4.34.6 h1:sBgfIwyN0TQ9C5hwIeuqyeAKyMWnbvj2fvpF4L11uzU=
