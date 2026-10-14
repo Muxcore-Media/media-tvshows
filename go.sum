@@ -2,12 +2,10 @@ github.com/Muxcore-Media/contracts-automation v0.1.1 h1:ligA8uWK3X46jIItwinfQ+0Y
 github.com/Muxcore-Media/contracts-automation v0.1.1/go.mod h1:HWpgvkMDZwf/2YFAndQ9NDTkynEtnRML4SOuZ6/SRNE=
 github.com/Muxcore-Media/contracts-media-admin v0.1.1 h1:XeOQtbg7O+fF/3Wb8Ok7+Uz2SlnYcoATIKGqrCrSgmk=
 github.com/Muxcore-Media/contracts-media-admin v0.1.1/go.mod h1:FnXzE5nlrbgdRdlSiQlJ/xW6bJh5WWf+J2Q6BcOPp5M=
-github.com/Muxcore-Media/contracts-metadata v0.2.0 h1:WBBwCpkz4KN4ilj1MOxf9MH1I91xtojDE/FDfnSzITw=
-github.com/Muxcore-Media/contracts-metadata v0.2.0/go.mod h1:z1q8wH0cRsngXYxoWI/MCuV99oGROQrco5FygHlAp1s=
 github.com/Muxcore-Media/contracts-metadata v0.2.1 h1:TETuZMeesmoz+w6Fs1Yd17qoqAHl/4uggVnfuNwjKwA=
 github.com/Muxcore-Media/contracts-metadata v0.2.1/go.mod h1:z1q8wH0cRsngXYxoWI/MCuV99oGROQrco5FygHlAp1s=
-github.com/Muxcore-Media/core v0.6.14 h1:txrjE0arrInXP1LVPC3dPRReehexEqmPRMVtM66rSPQ=
-github.com/Muxcore-Media/core v0.6.14/go.mod h1:lZ6tuCEjwmXI0zd6lhKOkm/qpB1Js4rrB+Bs9lCNZjA=
+github.com/Muxcore-Media/core v0.6.17 h1:Im5PGyr0VAwOSvVdlf+AzAx+Ct1pX7at42nd7ZiMOsg=
+github.com/Muxcore-Media/core v0.6.17/go.mod h1:lZ6tuCEjwmXI0zd6lhKOkm/qpB1Js4rrB+Bs9lCNZjA=
 github.com/Muxcore-Media/core/pkg/contracts v0.6.0 h1:NNaPjtDT81ESDDSMiEk2LGn6XsIFz+pKhXrr1TeSH+0=
 github.com/Muxcore-Media/core/pkg/contracts v0.6.0/go.mod h1:riu1DrsCAJ9AJf9uf8IG1W8nYzcQ+Y7HiT6okz7Lmck=
 github.com/Muxcore-Media/core/sdk/go/client v0.6.1 h1:P8UFaAWRUFQwqUFAAgsYuhvOo/Pl2OnelTTDSoBSKwc=
