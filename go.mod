@@ -12,7 +12,7 @@ require (
 	github.com/Muxcore-Media/core/sdk/go/module v0.6.7
 	github.com/Muxcore-Media/media-root-folders v0.1.7
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.55.0
 )
 
